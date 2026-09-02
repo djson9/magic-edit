@@ -8,7 +8,7 @@ const helpThreadId = '123e4567-e89b-42d3-a456-426614174001'
 const threadTitle = 'Example review thread with a deliberately long title'
 const threadUrl = `https://acp.example.test/threads/${threadId}`
 
-function page({ tagName = 'magic-edit', attributes = `thread-id="${threadId}"`, wired = true } = {}) {
+function page({ tagName = 'magic-edit', attributes = `thread-id="${threadId}"`, wired = true, ios = false } = {}) {
   const requests = []
   const dom = new JSDOM(`<!doctype html><html><head></head><body data-review-screen="Overview">
     <main><h1 data-inspect-id="hero-title">Example title</h1><div id="plain-card">Plain dashboard card</div></main>
@@ -19,6 +19,12 @@ function page({ tagName = 'magic-edit', attributes = `thread-id="${threadId}"`, 
     runScripts: 'dangerously',
     url: 'https://example.test/page',
     beforeParse(window) {
+      if (ios) {
+        Object.defineProperty(window.navigator, 'userAgent', {
+          configurable: true,
+          value: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1',
+        })
+      }
       window.fetch = async (input, init) => {
         const request = { url: String(input), init }
         requests.push(request)
@@ -76,6 +82,23 @@ describe('@djson9/magic-edit browser bundle', () => {
     expect(helpLink.textContent).toBe('Help')
     expect(helpLink.href).toBe(`https://acp.example.test/threads/${helpThreadId}`)
     expect(document.querySelector('#rrc-inspector-surface').hidden).toBe(false)
+  })
+
+  it('opens destination and help threads directly in the iOS app', async () => {
+    const { dom } = page({
+      attributes: `thread-id="${threadId}" help-thread-id="${helpThreadId}"`,
+      ios: true,
+    })
+    const document = dom.window.document
+    document.querySelector('magic-edit').shadowRoot.querySelector('button').click()
+    await wait(dom, 75)
+
+    const link = document.querySelector('#rrc-thread-link')
+    expect(link.getAttribute('href')).toBe(`acpweb://open?path=%2Fthreads%2F${threadId}`)
+    expect(link.hasAttribute('target')).toBe(false)
+    const helpLink = document.querySelector('#rrc-help-link')
+    expect(helpLink.getAttribute('href')).toBe(`acpweb://open?path=%2Fthreads%2F${helpThreadId}`)
+    expect(helpLink.hasAttribute('target')).toBe(false)
   })
 
   it('requires Select and posts one plain-text message with element context', async () => {
