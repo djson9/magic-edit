@@ -4,8 +4,11 @@
 .rrc-launcher button { min-height: 39px; display: inline-flex; align-items: center; gap: 7px; padding: 0 13px; border: 0; border-radius: 8px; color: white; background: #7666df; font-size: 11px; font-weight: 750; cursor: pointer; }
 .rrc-launcher button:hover { background: #8979ec; }
 .rrc-launcher button:disabled { opacity: .65; cursor: wait; }
-.rrc-thread-destination { position: fixed; z-index: 2147483606; top: max(10px, env(safe-area-inset-top)); left: 50%; max-width: calc(100vw - 20px); min-height: 34px; display: flex; align-items: center; justify-content: center; padding: 7px 11px; transform: translateX(-50%); overflow: hidden; border: 1px solid rgba(151,137,224,.38); border-radius: 999px; color: #b9b4c7; background: rgba(28,27,34,.94); box-shadow: 0 8px 24px rgba(0,0,0,.34); backdrop-filter: blur(14px); font-size: 10px; font-weight: 650; line-height: 1; white-space: nowrap; }
+.rrc-thread-destination { position: fixed; z-index: 2147483606; top: max(10px, env(safe-area-inset-top)); left: 50%; max-width: calc(100vw - 20px); min-height: 34px; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 5px 6px 5px 11px; transform: translateX(-50%); overflow: hidden; border: 1px solid rgba(151,137,224,.38); border-radius: 999px; color: #b9b4c7; background: rgba(28,27,34,.94); box-shadow: 0 8px 24px rgba(0,0,0,.34); backdrop-filter: blur(14px); font-size: 10px; font-weight: 650; line-height: 1; white-space: nowrap; }
+.rrc-thread-copy { min-width: 0; display: flex; align-items: center; overflow: hidden; }
 .rrc-thread-destination a { min-width: 0; overflow: hidden; color: #b7a9ff; font: inherit; text-decoration: underline; text-decoration-color: rgba(183,169,255,.45); text-overflow: ellipsis; white-space: nowrap; }
+.rrc-thread-destination .rrc-help-link { flex: none; min-height: 24px; display: inline-flex; align-items: center; padding: 0 9px; border: 1px solid rgba(183,169,255,.26); border-radius: 999px; color: #d4ccff; background: rgba(112,103,200,.14); text-decoration: none; }
+.rrc-thread-destination .rrc-help-link:hover { background: rgba(112,103,200,.24); }
 .rrc-thread-destination a:focus-visible { outline: 2px solid rgba(183,169,255,.65); outline-offset: 2px; border-radius: 3px; }
 
 .rrc-inspector-surface { position: fixed; z-index: 2147483500; inset: 0; touch-action: none; user-select: none; cursor: none; }

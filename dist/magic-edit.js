@@ -1,9 +1,9 @@
-/* @djson9/magic-edit v0.1.1 | https://github.com/djson9/magic-edit */
+/* @djson9/magic-edit v0.1.2 | https://github.com/djson9/magic-edit */
 (() => {
   if (document.getElementById('magic-edit-styles')) return
   const style = document.createElement('style')
   style.id = 'magic-edit-styles'
-  style.textContent = ".rrc-ui, .rrc-ui * { box-sizing: border-box; font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, \"SF Pro Text\", \"Segoe UI\", sans-serif; }\n.rrc-ui[hidden], .rrc-ui [hidden] { display: none !important; }\n.rrc-launcher { position: fixed; z-index: 2147483600; left: 50%; bottom: max(12px, env(safe-area-inset-bottom)); display: flex; gap: 5px; padding: 5px; transform: translateX(-50%); border: 1px solid #4a4658; border-radius: 13px; background: rgba(28,28,33,.96); box-shadow: 0 13px 38px rgba(0,0,0,.46); backdrop-filter: blur(16px); }\n.rrc-launcher button { min-height: 39px; display: inline-flex; align-items: center; gap: 7px; padding: 0 13px; border: 0; border-radius: 8px; color: white; background: #7666df; font-size: 11px; font-weight: 750; cursor: pointer; }\n.rrc-launcher button:hover { background: #8979ec; }\n.rrc-launcher button:disabled { opacity: .65; cursor: wait; }\n.rrc-thread-destination { position: fixed; z-index: 2147483606; top: max(10px, env(safe-area-inset-top)); left: 50%; max-width: calc(100vw - 20px); min-height: 34px; display: flex; align-items: center; justify-content: center; padding: 7px 11px; transform: translateX(-50%); overflow: hidden; border: 1px solid rgba(151,137,224,.38); border-radius: 999px; color: #b9b4c7; background: rgba(28,27,34,.94); box-shadow: 0 8px 24px rgba(0,0,0,.34); backdrop-filter: blur(14px); font-size: 10px; font-weight: 650; line-height: 1; white-space: nowrap; }\n.rrc-thread-destination a { min-width: 0; overflow: hidden; color: #b7a9ff; font: inherit; text-decoration: underline; text-decoration-color: rgba(183,169,255,.45); text-overflow: ellipsis; white-space: nowrap; }\n.rrc-thread-destination a:focus-visible { outline: 2px solid rgba(183,169,255,.65); outline-offset: 2px; border-radius: 3px; }\n\n.rrc-inspector-surface { position: fixed; z-index: 2147483500; inset: 0; touch-action: none; user-select: none; cursor: none; }\n.rrc-target-highlight { position: fixed; z-index: 2147483501; pointer-events: none; border: 2px solid #9a86ff; border-radius: 5px; background: rgba(130,104,246,.1); box-shadow: 0 0 0 1px rgba(17,17,20,.68); }\n.rrc-target-highlight span { position: absolute; left: -2px; bottom: calc(100% + 4px); max-width: min(330px, 82vw); padding: 4px 7px; overflow: hidden; border-radius: 5px; color: white; background: #7c69e7; font-size: 9px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }\n.rrc-target-highlight span.rrc-inside { top: 4px; bottom: auto; }\n.rrc-virtual-cursor { position: fixed; z-index: 2147483503; width: 28px; height: 32px; pointer-events: none; transform: translate(-3px,-3px); filter: drop-shadow(0 2px 1px #000) drop-shadow(0 0 4px #000); }\n.rrc-virtual-cursor::before { content: ''; display: block; width: 22px; height: 27px; background: #fff; clip-path: polygon(0 0, 88% 69%, 55% 72%, 73% 96%, 58% 100%, 40% 77%, 0 100%); }\n.rrc-virtual-cursor.rrc-dragging { transform: translate(-3px,-3px) scale(1.08); filter: drop-shadow(0 2px 1px #000) drop-shadow(0 0 8px #907bff); }\n.rrc-inspector-dock { position: fixed; z-index: 2147483504; left: 50%; bottom: max(67px, calc(env(safe-area-inset-bottom) + 55px)); width: min(470px, calc(100vw - 18px)); min-height: 48px; display: flex; align-items: center; gap: 9px; padding: 6px 7px 6px 11px; transform: translateX(-50%); border: 1px solid #575069; border-radius: 10px; color: #e5e0f1; background: rgba(34,32,41,.98); box-shadow: 0 12px 35px rgba(0,0,0,.48); }\n.rrc-inspector-target { min-width: 0; flex: 1; overflow: hidden; font-size: 10px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }\n.rrc-inspector-target small { display: block; margin-bottom: 2px; color: #8c879a; font-size: 7.5px; letter-spacing: .08em; }\n.rrc-inspector-dock button { min-height: 35px; display: inline-flex; align-items: center; gap: 5px; padding: 0 12px; border: 0; border-radius: 7px; color: white; background: #7666df; font-size: 10px; font-weight: 800; cursor: pointer; }\n.rrc-inspector-dock button:disabled { opacity: .4; }\nbody.rrc-inspecting * { cursor: none !important; }\nbody.rrc-inspecting .rrc-ui, body.rrc-inspecting .rrc-ui * { cursor: initial !important; }\nbody.rrc-inspecting .rrc-ui button { cursor: pointer !important; }\nbody.rrc-inspecting .rrc-inspector-surface { cursor: none !important; }\n\n.rrc-overlay { position: fixed; z-index: 2147483610; inset: 0; display: grid; align-items: end; background: rgba(7,7,10,.5); backdrop-filter: blur(4px); }\n.rrc-sheet { width: min(520px, calc(100% - 18px)); max-height: min(680px, calc(100dvh - 28px)); margin: 0 auto 9px; padding: 17px; overflow-y: auto; border: 1px solid #46424f; border-radius: 18px; color: #e8e6ec; background: #1a1a1f; box-shadow: 0 24px 70px rgba(0,0,0,.62); }\n.rrc-sheet-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }\n.rrc-sheet-head small { color: #8d80e9; font-size: 8px; font-weight: 850; letter-spacing: .1em; }\n.rrc-sheet-head h2 { margin: 4px 0 0; color: #e8e6ec; font-size: 19px; letter-spacing: -.025em; }\n.rrc-icon-button { width: 34px; height: 34px; display: grid; place-items: center; flex: none; border: 0; border-radius: 8px; color: #98959f; background: #29282e; font-size: 18px; cursor: pointer; }\n.rrc-element-context { margin-top: 14px; padding: 10px; border: 1px solid #383440; border-radius: 10px; color: #aaa5b4; background: #151519; font-size: 9px; line-height: 1.45; }\n.rrc-element-context strong { display: block; margin-bottom: 3px; overflow: hidden; color: #d4d0db; text-overflow: ellipsis; white-space: nowrap; }\n.rrc-element-context code { display: block; overflow: hidden; color: #706b79; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }\n.rrc-composer-label { display: block; margin: 15px 0 7px; color: #b7b3bd; font-size: 10px; font-weight: 700; }\n.rrc-comment-input { width: 100%; min-height: 112px; resize: vertical; padding: 12px; border: 1px solid #47434f; border-radius: 10px; outline: 0; color: #f0eef3; background: #111114; font-size: 14px; line-height: 1.5; }\n.rrc-comment-input:focus { border-color: #7666df; box-shadow: 0 0 0 3px rgba(118,102,223,.15); }\n.rrc-sheet-actions { margin-top: 14px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }\n.rrc-sheet-actions span { color: #6e6b76; font-size: 8.5px; }\n.rrc-primary { min-height: 40px; padding: 0 14px; border: 0; border-radius: 9px; color: white; background: #7666df; font-size: 10px; font-weight: 800; cursor: pointer; }\n.rrc-primary:disabled { opacity: .4; cursor: default; }\n.rrc-error-copy { margin: 15px 0 0; color: #c4c0ca; font-size: 12px; line-height: 1.55; }\n.rrc-error-help { margin: 8px 0 0; color: #77737f; font-size: 9px; line-height: 1.45; }\n.rrc-sent-toast { position: fixed; z-index: 2147483620; left: 50%; bottom: max(22px, env(safe-area-inset-bottom)); min-height: 42px; display: flex; align-items: center; gap: 7px; padding: 0 15px; transform: translateX(-50%); border: 1px solid rgba(145,235,174,.34); border-radius: 11px; color: #f4fff7; background: rgba(30,126,66,.97); box-shadow: 0 12px 34px rgba(13,76,37,.38); font-size: 12px; font-weight: 800; }\n.rrc-sent-toast span { width: 19px; height: 19px; display: grid; place-items: center; border-radius: 50%; color: #1e7e42; background: #e6ffed; font-size: 11px; }\n\n@media (max-width: 760px) {\n  .rrc-launcher button { min-height: 44px; font-size: 13px; }\n  .rrc-thread-destination { min-height: 38px; font-size: 11px; }\n  .rrc-inspector-dock { bottom: max(69px, calc(env(safe-area-inset-bottom) + 57px)); min-height: 53px; }\n  .rrc-inspector-target { font-size: 11px; }\n  .rrc-inspector-dock button { min-height: 39px; font-size: 12px; }\n  .rrc-sheet { width: calc(100% - 14px); margin-bottom: max(7px, env(safe-area-inset-bottom)); padding: 16px; }\n  .rrc-sheet-head h2 { font-size: 22px; }\n  .rrc-comment-input { font-size: 16px; }\n  .rrc-primary { min-height: 44px; font-size: 12px; }\n}\n\n@media (prefers-reduced-motion: reduce) {\n  .rrc-ui, .rrc-ui * { transition-duration: .01ms !important; animation-duration: .01ms !important; }\n}\n"
+  style.textContent = ".rrc-ui, .rrc-ui * { box-sizing: border-box; font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, \"SF Pro Text\", \"Segoe UI\", sans-serif; }\n.rrc-ui[hidden], .rrc-ui [hidden] { display: none !important; }\n.rrc-launcher { position: fixed; z-index: 2147483600; left: 50%; bottom: max(12px, env(safe-area-inset-bottom)); display: flex; gap: 5px; padding: 5px; transform: translateX(-50%); border: 1px solid #4a4658; border-radius: 13px; background: rgba(28,28,33,.96); box-shadow: 0 13px 38px rgba(0,0,0,.46); backdrop-filter: blur(16px); }\n.rrc-launcher button { min-height: 39px; display: inline-flex; align-items: center; gap: 7px; padding: 0 13px; border: 0; border-radius: 8px; color: white; background: #7666df; font-size: 11px; font-weight: 750; cursor: pointer; }\n.rrc-launcher button:hover { background: #8979ec; }\n.rrc-launcher button:disabled { opacity: .65; cursor: wait; }\n.rrc-thread-destination { position: fixed; z-index: 2147483606; top: max(10px, env(safe-area-inset-top)); left: 50%; max-width: calc(100vw - 20px); min-height: 34px; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 5px 6px 5px 11px; transform: translateX(-50%); overflow: hidden; border: 1px solid rgba(151,137,224,.38); border-radius: 999px; color: #b9b4c7; background: rgba(28,27,34,.94); box-shadow: 0 8px 24px rgba(0,0,0,.34); backdrop-filter: blur(14px); font-size: 10px; font-weight: 650; line-height: 1; white-space: nowrap; }\n.rrc-thread-copy { min-width: 0; display: flex; align-items: center; overflow: hidden; }\n.rrc-thread-destination a { min-width: 0; overflow: hidden; color: #b7a9ff; font: inherit; text-decoration: underline; text-decoration-color: rgba(183,169,255,.45); text-overflow: ellipsis; white-space: nowrap; }\n.rrc-thread-destination .rrc-help-link { flex: none; min-height: 24px; display: inline-flex; align-items: center; padding: 0 9px; border: 1px solid rgba(183,169,255,.26); border-radius: 999px; color: #d4ccff; background: rgba(112,103,200,.14); text-decoration: none; }\n.rrc-thread-destination .rrc-help-link:hover { background: rgba(112,103,200,.24); }\n.rrc-thread-destination a:focus-visible { outline: 2px solid rgba(183,169,255,.65); outline-offset: 2px; border-radius: 3px; }\n\n.rrc-inspector-surface { position: fixed; z-index: 2147483500; inset: 0; touch-action: none; user-select: none; cursor: none; }\n.rrc-target-highlight { position: fixed; z-index: 2147483501; pointer-events: none; border: 2px solid #9a86ff; border-radius: 5px; background: rgba(130,104,246,.1); box-shadow: 0 0 0 1px rgba(17,17,20,.68); }\n.rrc-target-highlight span { position: absolute; left: -2px; bottom: calc(100% + 4px); max-width: min(330px, 82vw); padding: 4px 7px; overflow: hidden; border-radius: 5px; color: white; background: #7c69e7; font-size: 9px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }\n.rrc-target-highlight span.rrc-inside { top: 4px; bottom: auto; }\n.rrc-virtual-cursor { position: fixed; z-index: 2147483503; width: 28px; height: 32px; pointer-events: none; transform: translate(-3px,-3px); filter: drop-shadow(0 2px 1px #000) drop-shadow(0 0 4px #000); }\n.rrc-virtual-cursor::before { content: ''; display: block; width: 22px; height: 27px; background: #fff; clip-path: polygon(0 0, 88% 69%, 55% 72%, 73% 96%, 58% 100%, 40% 77%, 0 100%); }\n.rrc-virtual-cursor.rrc-dragging { transform: translate(-3px,-3px) scale(1.08); filter: drop-shadow(0 2px 1px #000) drop-shadow(0 0 8px #907bff); }\n.rrc-inspector-dock { position: fixed; z-index: 2147483504; left: 50%; bottom: max(67px, calc(env(safe-area-inset-bottom) + 55px)); width: min(470px, calc(100vw - 18px)); min-height: 48px; display: flex; align-items: center; gap: 9px; padding: 6px 7px 6px 11px; transform: translateX(-50%); border: 1px solid #575069; border-radius: 10px; color: #e5e0f1; background: rgba(34,32,41,.98); box-shadow: 0 12px 35px rgba(0,0,0,.48); }\n.rrc-inspector-target { min-width: 0; flex: 1; overflow: hidden; font-size: 10px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }\n.rrc-inspector-target small { display: block; margin-bottom: 2px; color: #8c879a; font-size: 7.5px; letter-spacing: .08em; }\n.rrc-inspector-dock button { min-height: 35px; display: inline-flex; align-items: center; gap: 5px; padding: 0 12px; border: 0; border-radius: 7px; color: white; background: #7666df; font-size: 10px; font-weight: 800; cursor: pointer; }\n.rrc-inspector-dock button:disabled { opacity: .4; }\nbody.rrc-inspecting * { cursor: none !important; }\nbody.rrc-inspecting .rrc-ui, body.rrc-inspecting .rrc-ui * { cursor: initial !important; }\nbody.rrc-inspecting .rrc-ui button { cursor: pointer !important; }\nbody.rrc-inspecting .rrc-inspector-surface { cursor: none !important; }\n\n.rrc-overlay { position: fixed; z-index: 2147483610; inset: 0; display: grid; align-items: end; background: rgba(7,7,10,.5); backdrop-filter: blur(4px); }\n.rrc-sheet { width: min(520px, calc(100% - 18px)); max-height: min(680px, calc(100dvh - 28px)); margin: 0 auto 9px; padding: 17px; overflow-y: auto; border: 1px solid #46424f; border-radius: 18px; color: #e8e6ec; background: #1a1a1f; box-shadow: 0 24px 70px rgba(0,0,0,.62); }\n.rrc-sheet-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }\n.rrc-sheet-head small { color: #8d80e9; font-size: 8px; font-weight: 850; letter-spacing: .1em; }\n.rrc-sheet-head h2 { margin: 4px 0 0; color: #e8e6ec; font-size: 19px; letter-spacing: -.025em; }\n.rrc-icon-button { width: 34px; height: 34px; display: grid; place-items: center; flex: none; border: 0; border-radius: 8px; color: #98959f; background: #29282e; font-size: 18px; cursor: pointer; }\n.rrc-element-context { margin-top: 14px; padding: 10px; border: 1px solid #383440; border-radius: 10px; color: #aaa5b4; background: #151519; font-size: 9px; line-height: 1.45; }\n.rrc-element-context strong { display: block; margin-bottom: 3px; overflow: hidden; color: #d4d0db; text-overflow: ellipsis; white-space: nowrap; }\n.rrc-element-context code { display: block; overflow: hidden; color: #706b79; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }\n.rrc-composer-label { display: block; margin: 15px 0 7px; color: #b7b3bd; font-size: 10px; font-weight: 700; }\n.rrc-comment-input { width: 100%; min-height: 112px; resize: vertical; padding: 12px; border: 1px solid #47434f; border-radius: 10px; outline: 0; color: #f0eef3; background: #111114; font-size: 14px; line-height: 1.5; }\n.rrc-comment-input:focus { border-color: #7666df; box-shadow: 0 0 0 3px rgba(118,102,223,.15); }\n.rrc-sheet-actions { margin-top: 14px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }\n.rrc-sheet-actions span { color: #6e6b76; font-size: 8.5px; }\n.rrc-primary { min-height: 40px; padding: 0 14px; border: 0; border-radius: 9px; color: white; background: #7666df; font-size: 10px; font-weight: 800; cursor: pointer; }\n.rrc-primary:disabled { opacity: .4; cursor: default; }\n.rrc-error-copy { margin: 15px 0 0; color: #c4c0ca; font-size: 12px; line-height: 1.55; }\n.rrc-error-help { margin: 8px 0 0; color: #77737f; font-size: 9px; line-height: 1.45; }\n.rrc-sent-toast { position: fixed; z-index: 2147483620; left: 50%; bottom: max(22px, env(safe-area-inset-bottom)); min-height: 42px; display: flex; align-items: center; gap: 7px; padding: 0 15px; transform: translateX(-50%); border: 1px solid rgba(145,235,174,.34); border-radius: 11px; color: #f4fff7; background: rgba(30,126,66,.97); box-shadow: 0 12px 34px rgba(13,76,37,.38); font-size: 12px; font-weight: 800; }\n.rrc-sent-toast span { width: 19px; height: 19px; display: grid; place-items: center; border-radius: 50%; color: #1e7e42; background: #e6ffed; font-size: 11px; }\n\n@media (max-width: 760px) {\n  .rrc-launcher button { min-height: 44px; font-size: 13px; }\n  .rrc-thread-destination { min-height: 38px; font-size: 11px; }\n  .rrc-inspector-dock { bottom: max(69px, calc(env(safe-area-inset-bottom) + 57px)); min-height: 53px; }\n  .rrc-inspector-target { font-size: 11px; }\n  .rrc-inspector-dock button { min-height: 39px; font-size: 12px; }\n  .rrc-sheet { width: calc(100% - 14px); margin-bottom: max(7px, env(safe-area-inset-bottom)); padding: 16px; }\n  .rrc-sheet-head h2 { font-size: 22px; }\n  .rrc-comment-input { font-size: 16px; }\n  .rrc-primary { min-height: 44px; font-size: 12px; }\n}\n\n@media (prefers-reduced-motion: reduce) {\n  .rrc-ui, .rrc-ui * { transition-duration: .01ms !important; animation-duration: .01ms !important; }\n}\n"
   document.head.append(style)
 })();
 (() => {
@@ -15,6 +15,8 @@
   const magicEdit = document.querySelector(magicEditSelector)
   if (magicEdit?.hasAttribute('external-controller')) return
   const configuredThreadId = magicEdit?.getAttribute('thread-id')?.trim() || null
+  const configuredHelpThreadId = magicEdit?.getAttribute('help-thread-id')?.trim() || null
+  const configuredHelpThreadUrl = magicEdit?.getAttribute('help-thread-url')?.trim() || null
   const metaId = document.querySelector('meta[name="review-room-mockup-id"]')?.content
   const queryId = new URLSearchParams(location.search).get('preview')
   const configuredReviewId = magicEdit?.getAttribute('review-id')?.trim() || null
@@ -33,6 +35,8 @@
     drag: null,
     selection: null,
     threadId: configuredThreadId,
+    helpThreadId: configuredHelpThreadId,
+    helpThreadUrl: configuredHelpThreadUrl,
     thread: null,
   }
   let sentToastTimer = null
@@ -43,7 +47,7 @@
     <div class="rrc-launcher rrc-ui" data-review-comment-ui>
       <button id="rrc-comment-button" type="button"><span>⌁</span><span id="rrc-comment-button-label">Comment on UI</span></button>
     </div>
-    <div class="rrc-thread-destination rrc-ui" id="rrc-thread-destination" data-review-comment-ui aria-live="polite" hidden><span>Sending to “</span><a id="rrc-thread-link" target="_blank" rel="noopener noreferrer"></a><span>”</span></div>
+    <div class="rrc-thread-destination rrc-ui" id="rrc-thread-destination" data-review-comment-ui aria-live="polite" hidden><span class="rrc-thread-copy">Sending to “<a id="rrc-thread-link" target="_blank" rel="noopener noreferrer"></a>”</span><a class="rrc-help-link" id="rrc-help-link" target="_blank" rel="noopener noreferrer" hidden>Help</a></div>
     <div class="rrc-inspector-surface rrc-ui" id="rrc-inspector-surface" data-review-comment-ui hidden aria-hidden="true"></div>
     <div class="rrc-target-highlight rrc-ui" id="rrc-target-highlight" data-review-comment-ui hidden aria-hidden="true"><span id="rrc-highlight-label"></span></div>
     <div class="rrc-virtual-cursor rrc-ui" id="rrc-virtual-cursor" data-review-comment-ui hidden aria-hidden="true"></div>
@@ -80,6 +84,7 @@
     commentButtonLabel: $('#rrc-comment-button-label'),
     threadDestination: $('#rrc-thread-destination'),
     threadLink: $('#rrc-thread-link'),
+    helpLink: $('#rrc-help-link'),
     surface: $('#rrc-inspector-surface'),
     highlight: $('#rrc-target-highlight'),
     highlightLabel: $('#rrc-highlight-label'),
@@ -228,6 +233,8 @@
     elements.threadLink.removeAttribute('href')
     elements.threadLink.removeAttribute('title')
     elements.threadLink.textContent = ''
+    elements.helpLink.hidden = true
+    elements.helpLink.removeAttribute('href')
     state.thread = null
   }
 
@@ -236,12 +243,28 @@
     return title.length > 30 ? `${title.slice(0, 29)}…` : title
   }
 
+  function helpThreadUrl(thread) {
+    if (state.helpThreadUrl) return state.helpThreadUrl
+    if (!state.helpThreadId || !thread.url) return null
+    try {
+      const url = new URL(thread.url, location.href)
+      if (!/\/threads\/[^/]+\/?$/.test(url.pathname)) return null
+      url.pathname = url.pathname.replace(/\/threads\/[^/]+\/?$/, `/threads/${encodeURIComponent(state.helpThreadId)}`)
+      return url.href
+    } catch (_) {
+      return null
+    }
+  }
+
   function showThreadDestination(thread) {
     const title = String(thread.title || '').trim() || `ACP thread ${String(thread.id || '').slice(0, 8)}`
     state.thread = thread
     elements.threadLink.textContent = truncatedThreadTitle(title)
     elements.threadLink.title = title
     elements.threadLink.href = thread.url
+    const helpUrl = helpThreadUrl(thread)
+    elements.helpLink.hidden = !helpUrl
+    if (helpUrl) elements.helpLink.href = helpUrl
     elements.threadDestination.hidden = false
   }
 
@@ -324,7 +347,10 @@
     elements.commentButtonLabel.textContent = 'Checking thread…'
     syncMagicEditState()
     try {
-      state.threadId = event?.detail?.threadId?.trim?.() || magicEdit?.getAttribute('thread-id')?.trim() || null
+      const source = event?.detail?.source || magicEdit
+      state.threadId = event?.detail?.threadId?.trim?.() || source?.getAttribute?.('thread-id')?.trim() || null
+      state.helpThreadId = event?.detail?.helpThreadId?.trim?.() || source?.getAttribute?.('help-thread-id')?.trim() || null
+      state.helpThreadUrl = event?.detail?.helpThreadUrl?.trim?.() || source?.getAttribute?.('help-thread-url')?.trim() || null
       const thread = await ensureThread(state.threadId)
       showThreadDestination(thread)
       startInspector()
@@ -564,11 +590,34 @@
       else this.removeAttribute('thread-id')
     }
 
+    get helpThreadId() {
+      return this.getAttribute('help-thread-id')?.trim() || ''
+    }
+
+    set helpThreadId(value) {
+      if (value) this.setAttribute('help-thread-id', value)
+      else this.removeAttribute('help-thread-id')
+    }
+
+    get helpThreadUrl() {
+      return this.getAttribute('help-thread-url')?.trim() || ''
+    }
+
+    set helpThreadUrl(value) {
+      if (value) this.setAttribute('help-thread-url', value)
+      else this.removeAttribute('help-thread-url')
+    }
+
     handleClick() {
       this.dispatchEvent(new CustomEvent('review-room:magic-edit', {
         bubbles: true,
         composed: true,
-        detail: { source: this, threadId: this.threadId || null },
+        detail: {
+          source: this,
+          threadId: this.threadId || null,
+          helpThreadId: this.helpThreadId || null,
+          helpThreadUrl: this.helpThreadUrl || null,
+        },
       }))
     }
 

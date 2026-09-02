@@ -1,6 +1,6 @@
 {
   "name": "@djson9/magic-edit",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Embeddable element selector that sends contextual UI feedback to an ACP Web thread.",
   "type": "module",
   "main": "./dist/magic-edit.js",
