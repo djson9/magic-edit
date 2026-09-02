@@ -9,7 +9,7 @@ Pin an immutable release and add one element:
 ```html
 <script
   type="module"
-  src="https://cdn.jsdelivr.net/gh/djson9/magic-edit@v0.1.0/dist/magic-edit.js">
+  src="https://cdn.jsdelivr.net/gh/djson9/magic-edit@v0.1.1/dist/magic-edit.js">
 </script>
 
 <magic-edit
@@ -35,6 +35,8 @@ Use `endpoint="/another/base"` to replace `/api/reviews`, or `api-root="/an/exac
 </magic-edit>
 ```
 
+Add `external-controller` when a page already owns its selector and composer and should use only the packaged button and `review-room:magic-edit` event.
+
 The server contract is:
 
 - `GET {api-root}/thread?threadId={thread-id}` → `{ "ok": true, "thread": { "id", "title", "url" } }`
@@ -47,7 +49,7 @@ Comments remain ordinary thread messages. Selected-element context is appended t
 After the npm release is available:
 
 ```sh
-npm install @djson9/magic-edit@0.1.0
+npm install @djson9/magic-edit@0.1.1
 ```
 
 Then import the self-registering component once:

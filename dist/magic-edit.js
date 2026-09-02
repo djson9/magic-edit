@@ -1,4 +1,4 @@
-/* @djson9/magic-edit v0.1.0 | https://github.com/djson9/magic-edit */
+/* @djson9/magic-edit v0.1.1 | https://github.com/djson9/magic-edit */
 (() => {
   if (document.getElementById('magic-edit-styles')) return
   const style = document.createElement('style')
@@ -13,6 +13,7 @@
 
   const magicEditSelector = 'magic-edit, review-room-magic-edit'
   const magicEdit = document.querySelector(magicEditSelector)
+  if (magicEdit?.hasAttribute('external-controller')) return
   const configuredThreadId = magicEdit?.getAttribute('thread-id')?.trim() || null
   const metaId = document.querySelector('meta[name="review-room-mockup-id"]')?.content
   const queryId = new URLSearchParams(location.search).get('preview')

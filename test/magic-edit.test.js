@@ -52,6 +52,13 @@ describe('@djson9/magic-edit browser bundle', () => {
     expect(dom.window.document.querySelector('review-room-magic-edit').shadowRoot.querySelector('button')).toBeTruthy()
   })
 
+  it('supports a page-owned selector without installing a second comment UI', () => {
+    const { dom } = page({ attributes: `thread-id="${threadId}" external-controller` })
+    const document = dom.window.document
+    expect(document.querySelector('magic-edit').shadowRoot.querySelector('button')).toBeTruthy()
+    expect(document.querySelector('#review-room-comment-tool')).toBeNull()
+  })
+
   it('uses component routing attributes and shows the verified thread destination', async () => {
     const { dom, requests } = page({ attributes: `thread-id="${threadId}" review-id="settings" endpoint="/feedback"` })
     const document = dom.window.document
