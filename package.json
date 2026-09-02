@@ -1,0 +1,43 @@
+{
+  "name": "@djson9/magic-edit",
+  "version": "0.1.0",
+  "description": "Embeddable element selector that sends contextual UI feedback to an ACP Web thread.",
+  "type": "module",
+  "main": "./dist/magic-edit.js",
+  "module": "./dist/magic-edit.js",
+  "browser": "./dist/magic-edit.js",
+  "exports": {
+    ".": "./dist/magic-edit.js",
+    "./magic-edit.js": "./dist/magic-edit.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "sideEffects": true,
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "npm run build && vitest run",
+    "pack:check": "npm pack --dry-run",
+    "prepublishOnly": "npm test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/djson9/magic-edit.git"
+  },
+  "homepage": "https://github.com/djson9/magic-edit#readme",
+  "bugs": {
+    "url": "https://github.com/djson9/magic-edit/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "jsdom": "^26.1.0",
+    "vitest": "^3.2.4"
+  }
+}
