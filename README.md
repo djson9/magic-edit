@@ -9,11 +9,12 @@ Pin an immutable release and add one element:
 ```html
 <script
   type="module"
-  src="https://cdn.jsdelivr.net/gh/djson9/magic-edit@v0.1.1/dist/magic-edit.js">
+  src="https://cdn.jsdelivr.net/gh/djson9/magic-edit@v0.1.2/dist/magic-edit.js">
 </script>
 
 <magic-edit
-  thread-id="123e4567-e89b-42d3-a456-426614174000">
+  thread-id="123e4567-e89b-42d3-a456-426614174000"
+  help-thread-id="123e4567-e89b-42d3-a456-426614174001">
 </magic-edit>
 ```
 
@@ -25,6 +26,8 @@ The default API route is `/api/reviews/{review-id}`. The review ID comes from, i
 4. `standalone` when `thread-id` is present.
 
 Use `endpoint="/another/base"` to replace `/api/reviews`, or `api-root="/an/exact/review/route"` to provide the complete route before `/thread` and `/messages`.
+
+Set `help-thread-id` to display a compact Help button beside the verified destination thread. Magic Edit derives its ACP Web origin from the verified thread URL. `help-thread-url` can provide an explicit URL instead.
 
 ```html
 <magic-edit
@@ -49,7 +52,7 @@ Comments remain ordinary thread messages. Selected-element context is appended t
 After the npm release is available:
 
 ```sh
-npm install @djson9/magic-edit@0.1.1
+npm install @djson9/magic-edit@0.1.2
 ```
 
 Then import the self-registering component once:

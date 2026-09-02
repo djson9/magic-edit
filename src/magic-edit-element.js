@@ -126,11 +126,34 @@
       else this.removeAttribute('thread-id')
     }
 
+    get helpThreadId() {
+      return this.getAttribute('help-thread-id')?.trim() || ''
+    }
+
+    set helpThreadId(value) {
+      if (value) this.setAttribute('help-thread-id', value)
+      else this.removeAttribute('help-thread-id')
+    }
+
+    get helpThreadUrl() {
+      return this.getAttribute('help-thread-url')?.trim() || ''
+    }
+
+    set helpThreadUrl(value) {
+      if (value) this.setAttribute('help-thread-url', value)
+      else this.removeAttribute('help-thread-url')
+    }
+
     handleClick() {
       this.dispatchEvent(new CustomEvent('review-room:magic-edit', {
         bubbles: true,
         composed: true,
-        detail: { source: this, threadId: this.threadId || null },
+        detail: {
+          source: this,
+          threadId: this.threadId || null,
+          helpThreadId: this.helpThreadId || null,
+          helpThreadUrl: this.helpThreadUrl || null,
+        },
       }))
     }
 

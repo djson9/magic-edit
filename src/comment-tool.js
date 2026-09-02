@@ -7,6 +7,8 @@
   const magicEdit = document.querySelector(magicEditSelector)
   if (magicEdit?.hasAttribute('external-controller')) return
   const configuredThreadId = magicEdit?.getAttribute('thread-id')?.trim() || null
+  const configuredHelpThreadId = magicEdit?.getAttribute('help-thread-id')?.trim() || null
+  const configuredHelpThreadUrl = magicEdit?.getAttribute('help-thread-url')?.trim() || null
   const metaId = document.querySelector('meta[name="review-room-mockup-id"]')?.content
   const queryId = new URLSearchParams(location.search).get('preview')
   const configuredReviewId = magicEdit?.getAttribute('review-id')?.trim() || null
@@ -25,6 +27,8 @@
     drag: null,
     selection: null,
     threadId: configuredThreadId,
+    helpThreadId: configuredHelpThreadId,
+    helpThreadUrl: configuredHelpThreadUrl,
     thread: null,
   }
   let sentToastTimer = null
@@ -35,7 +39,7 @@
     <div class="rrc-launcher rrc-ui" data-review-comment-ui>
       <button id="rrc-comment-button" type="button"><span>⌁</span><span id="rrc-comment-button-label">Comment on UI</span></button>
     </div>
-    <div class="rrc-thread-destination rrc-ui" id="rrc-thread-destination" data-review-comment-ui aria-live="polite" hidden><span>Sending to “</span><a id="rrc-thread-link" target="_blank" rel="noopener noreferrer"></a><span>”</span></div>
+    <div class="rrc-thread-destination rrc-ui" id="rrc-thread-destination" data-review-comment-ui aria-live="polite" hidden><span class="rrc-thread-copy">Sending to “<a id="rrc-thread-link" target="_blank" rel="noopener noreferrer"></a>”</span><a class="rrc-help-link" id="rrc-help-link" target="_blank" rel="noopener noreferrer" hidden>Help</a></div>
     <div class="rrc-inspector-surface rrc-ui" id="rrc-inspector-surface" data-review-comment-ui hidden aria-hidden="true"></div>
     <div class="rrc-target-highlight rrc-ui" id="rrc-target-highlight" data-review-comment-ui hidden aria-hidden="true"><span id="rrc-highlight-label"></span></div>
     <div class="rrc-virtual-cursor rrc-ui" id="rrc-virtual-cursor" data-review-comment-ui hidden aria-hidden="true"></div>
@@ -72,6 +76,7 @@
     commentButtonLabel: $('#rrc-comment-button-label'),
     threadDestination: $('#rrc-thread-destination'),
     threadLink: $('#rrc-thread-link'),
+    helpLink: $('#rrc-help-link'),
     surface: $('#rrc-inspector-surface'),
     highlight: $('#rrc-target-highlight'),
     highlightLabel: $('#rrc-highlight-label'),
@@ -220,6 +225,8 @@
     elements.threadLink.removeAttribute('href')
     elements.threadLink.removeAttribute('title')
     elements.threadLink.textContent = ''
+    elements.helpLink.hidden = true
+    elements.helpLink.removeAttribute('href')
     state.thread = null
   }
 
@@ -228,12 +235,28 @@
     return title.length > 30 ? `${title.slice(0, 29)}…` : title
   }
 
+  function helpThreadUrl(thread) {
+    if (state.helpThreadUrl) return state.helpThreadUrl
+    if (!state.helpThreadId || !thread.url) return null
+    try {
+      const url = new URL(thread.url, location.href)
+      if (!/\/threads\/[^/]+\/?$/.test(url.pathname)) return null
+      url.pathname = url.pathname.replace(/\/threads\/[^/]+\/?$/, `/threads/${encodeURIComponent(state.helpThreadId)}`)
+      return url.href
+    } catch (_) {
+      return null
+    }
+  }
+
   function showThreadDestination(thread) {
     const title = String(thread.title || '').trim() || `ACP thread ${String(thread.id || '').slice(0, 8)}`
     state.thread = thread
     elements.threadLink.textContent = truncatedThreadTitle(title)
     elements.threadLink.title = title
     elements.threadLink.href = thread.url
+    const helpUrl = helpThreadUrl(thread)
+    elements.helpLink.hidden = !helpUrl
+    if (helpUrl) elements.helpLink.href = helpUrl
     elements.threadDestination.hidden = false
   }
 
@@ -316,7 +339,10 @@
     elements.commentButtonLabel.textContent = 'Checking thread…'
     syncMagicEditState()
     try {
-      state.threadId = event?.detail?.threadId?.trim?.() || magicEdit?.getAttribute('thread-id')?.trim() || null
+      const source = event?.detail?.source || magicEdit
+      state.threadId = event?.detail?.threadId?.trim?.() || source?.getAttribute?.('thread-id')?.trim() || null
+      state.helpThreadId = event?.detail?.helpThreadId?.trim?.() || source?.getAttribute?.('help-thread-id')?.trim() || null
+      state.helpThreadUrl = event?.detail?.helpThreadUrl?.trim?.() || source?.getAttribute?.('help-thread-url')?.trim() || null
       const thread = await ensureThread(state.threadId)
       showThreadDestination(thread)
       startInspector()

@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 const bundle = readFileSync('dist/magic-edit.js', 'utf8')
 const threadId = '123e4567-e89b-42d3-a456-426614174000'
+const helpThreadId = '123e4567-e89b-42d3-a456-426614174001'
 const threadTitle = 'Example review thread with a deliberately long title'
 const threadUrl = `https://acp.example.test/threads/${threadId}`
 
@@ -60,7 +61,7 @@ describe('@djson9/magic-edit browser bundle', () => {
   })
 
   it('uses component routing attributes and shows the verified thread destination', async () => {
-    const { dom, requests } = page({ attributes: `thread-id="${threadId}" review-id="settings" endpoint="/feedback"` })
+    const { dom, requests } = page({ attributes: `thread-id="${threadId}" help-thread-id="${helpThreadId}" review-id="settings" endpoint="/feedback"` })
     const document = dom.window.document
     document.querySelector('magic-edit').shadowRoot.querySelector('button').click()
     await wait(dom, 75)
@@ -70,6 +71,10 @@ describe('@djson9/magic-edit browser bundle', () => {
     expect(link.textContent).toBe(`${threadTitle.slice(0, 29)}…`)
     expect(link.textContent).toHaveLength(30)
     expect(link.href).toBe(threadUrl)
+    const helpLink = document.querySelector('#rrc-help-link')
+    expect(helpLink.hidden).toBe(false)
+    expect(helpLink.textContent).toBe('Help')
+    expect(helpLink.href).toBe(`https://acp.example.test/threads/${helpThreadId}`)
     expect(document.querySelector('#rrc-inspector-surface').hidden).toBe(false)
   })
 
