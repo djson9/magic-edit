@@ -1,4 +1,4 @@
-/* @djson9/magic-edit v0.1.2 | https://github.com/djson9/magic-edit */
+/* @djson9/magic-edit v0.1.3 | https://github.com/djson9/magic-edit */
 (() => {
   if (document.getElementById('magic-edit-styles')) return
   const style = document.createElement('style')
@@ -47,7 +47,7 @@
     <div class="rrc-launcher rrc-ui" data-review-comment-ui>
       <button id="rrc-comment-button" type="button"><span>⌁</span><span id="rrc-comment-button-label">Comment on UI</span></button>
     </div>
-    <div class="rrc-thread-destination rrc-ui" id="rrc-thread-destination" data-review-comment-ui aria-live="polite" hidden><span class="rrc-thread-copy">Sending to “<a id="rrc-thread-link" target="_blank" rel="noopener noreferrer"></a>”</span><a class="rrc-help-link" id="rrc-help-link" target="_blank" rel="noopener noreferrer" hidden>Help</a></div>
+    <div class="rrc-thread-destination rrc-ui" id="rrc-thread-destination" data-review-comment-ui aria-live="polite" hidden><span class="rrc-thread-copy">Sending to “<a id="rrc-thread-link"></a>”</span><a class="rrc-help-link" id="rrc-help-link" hidden>Help</a></div>
     <div class="rrc-inspector-surface rrc-ui" id="rrc-inspector-surface" data-review-comment-ui hidden aria-hidden="true"></div>
     <div class="rrc-target-highlight rrc-ui" id="rrc-target-highlight" data-review-comment-ui hidden aria-hidden="true"><span id="rrc-highlight-label"></span></div>
     <div class="rrc-virtual-cursor rrc-ui" id="rrc-virtual-cursor" data-review-comment-ui hidden aria-hidden="true"></div>
@@ -232,9 +232,13 @@
     elements.threadDestination.hidden = true
     elements.threadLink.removeAttribute('href')
     elements.threadLink.removeAttribute('title')
+    elements.threadLink.removeAttribute('target')
+    elements.threadLink.removeAttribute('rel')
     elements.threadLink.textContent = ''
     elements.helpLink.hidden = true
     elements.helpLink.removeAttribute('href')
+    elements.helpLink.removeAttribute('target')
+    elements.helpLink.removeAttribute('rel')
     state.thread = null
   }
 
@@ -243,14 +247,56 @@
     return title.length > 30 ? `${title.slice(0, 29)}…` : title
   }
 
-  function helpThreadUrl(thread) {
-    if (state.helpThreadUrl) return state.helpThreadUrl
+  function isIOS() {
+    const userAgent = navigator.userAgent || ''
+    if (/iPad|iPhone|iPod/.test(userAgent)) return true
+    return navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1
+  }
+
+  function validThreadId(value) {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || '').trim())
+  }
+
+  function threadIdFromUrl(value) {
+    try {
+      const url = new URL(value, location.href)
+      const match = url.pathname.match(/\/threads\/([^/]+)\/?$/)
+      if (!match) return null
+      const threadId = decodeURIComponent(match[1]).toLowerCase()
+      return validThreadId(threadId) ? threadId : null
+    } catch (_) {
+      return null
+    }
+  }
+
+  function appThreadUrl(threadId) {
+    const normalized = String(threadId || '').trim().toLowerCase()
+    if (!validThreadId(normalized)) return null
+    return `acpweb://open?path=${encodeURIComponent(`/threads/${normalized}`)}`
+  }
+
+  function setThreadLink(element, threadId, webUrl) {
+    const appUrl = isIOS() ? appThreadUrl(threadId || threadIdFromUrl(webUrl)) : null
+    element.href = appUrl || webUrl
+    if (appUrl) {
+      element.removeAttribute('target')
+      element.removeAttribute('rel')
+      return
+    }
+    element.target = '_blank'
+    element.rel = 'noopener noreferrer'
+  }
+
+  function helpThreadDestination(thread) {
+    if (state.helpThreadUrl) {
+      return { threadId: state.helpThreadId || threadIdFromUrl(state.helpThreadUrl), webUrl: state.helpThreadUrl }
+    }
     if (!state.helpThreadId || !thread.url) return null
     try {
       const url = new URL(thread.url, location.href)
       if (!/\/threads\/[^/]+\/?$/.test(url.pathname)) return null
       url.pathname = url.pathname.replace(/\/threads\/[^/]+\/?$/, `/threads/${encodeURIComponent(state.helpThreadId)}`)
-      return url.href
+      return { threadId: state.helpThreadId, webUrl: url.href }
     } catch (_) {
       return null
     }
@@ -261,10 +307,10 @@
     state.thread = thread
     elements.threadLink.textContent = truncatedThreadTitle(title)
     elements.threadLink.title = title
-    elements.threadLink.href = thread.url
-    const helpUrl = helpThreadUrl(thread)
-    elements.helpLink.hidden = !helpUrl
-    if (helpUrl) elements.helpLink.href = helpUrl
+    setThreadLink(elements.threadLink, thread.id, thread.url)
+    const helpDestination = helpThreadDestination(thread)
+    elements.helpLink.hidden = !helpDestination
+    if (helpDestination) setThreadLink(elements.helpLink, helpDestination.threadId, helpDestination.webUrl)
     elements.threadDestination.hidden = false
   }
 
