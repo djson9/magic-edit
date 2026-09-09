@@ -2,6 +2,10 @@
 
 Magic Edit is a dependency-free web component for selecting any visible page element and sending a plain-text, contextual comment to an ACP Web thread.
 
+The same package also owns the React Native bubble, iOS cursor selector, target
+highlighting, and native comment composer. Apps provide an ACP API root and one
+or more destination thread IDs; they do not implement their own selectors.
+
 ## Browser install
 
 Pin an immutable release and add one element:
@@ -9,7 +13,7 @@ Pin an immutable release and add one element:
 ```html
 <script
   type="module"
-  src="https://cdn.jsdelivr.net/gh/djson9/magic-edit@v0.1.3/dist/magic-edit.js">
+  src="https://cdn.jsdelivr.net/gh/djson9/magic-edit@v0.2.0/dist/magic-edit.js">
 </script>
 
 <magic-edit
@@ -54,7 +58,7 @@ Comments remain ordinary thread messages. Selected-element context is appended t
 After the npm release is available:
 
 ```sh
-npm install @djson9/magic-edit@0.1.3
+npm install @djson9/magic-edit@0.2.0
 ```
 
 Then import the self-registering component once:
@@ -62,6 +66,31 @@ Then import the self-registering component once:
 ```js
 import '@djson9/magic-edit'
 ```
+
+## React Native
+
+Install the same package in a React Native app and run CocoaPods normally:
+
+```sh
+npm install @djson9/magic-edit@0.2.0
+cd ios && pod install
+```
+
+Mount the shared bubble once above the app navigator:
+
+```tsx
+import { MagicEditBubble } from '@djson9/magic-edit/react-native'
+
+<MagicEditBubble
+  apiRoot="https://acp.example.test/api/magic_edit"
+  threadId="123e4567-e89b-42d3-a456-426614174000"
+  threadLinkTarget="web"
+/>
+```
+
+On iOS the package supplies the floating bubble, draggable cursor, native and
+WebView hit testing, explicit Select action, target context, and comment sheet.
+The host app supplies only placement and routing configuration.
 
 ## Development
 
