@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { build } from 'esbuild'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const [styles, tool, element] = await Promise.all([
@@ -22,3 +23,12 @@ const output = `${banner}\n${styleInstaller};\n${tool.trim()};\n${element.trim()
 
 await mkdir(resolve(root, 'dist'), { recursive: true })
 await writeFile(resolve(root, 'dist/magic-edit.js'), output)
+await build({
+  entryPoints: [resolve(root, 'react-native/index.tsx')],
+  outfile: resolve(root, 'dist/react-native.cjs'),
+  bundle: true,
+  external: ['react', 'react-native'],
+  format: 'cjs',
+  platform: 'neutral',
+  target: ['es2022'],
+})

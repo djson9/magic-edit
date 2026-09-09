@@ -1,17 +1,25 @@
 {
   "name": "@djson9/magic-edit",
-  "version": "0.1.3",
-  "description": "Embeddable element selector that sends contextual UI feedback to an ACP Web thread.",
+  "version": "0.2.0",
+  "description": "Shared web and React Native element selector for contextual ACP Web feedback.",
   "type": "module",
   "main": "./dist/magic-edit.js",
   "module": "./dist/magic-edit.js",
   "browser": "./dist/magic-edit.js",
   "exports": {
     ".": "./dist/magic-edit.js",
-    "./magic-edit.js": "./dist/magic-edit.js"
+    "./magic-edit.js": "./dist/magic-edit.js",
+    "./react-native": {
+      "types": "./react-native/index.tsx",
+      "react-native": "./dist/react-native.cjs",
+      "default": "./dist/react-native.cjs"
+    }
   },
   "files": [
     "dist",
+    "ios",
+    "react-native",
+    "DJSON9MagicEdit.podspec",
     "README.md"
   ],
   "sideEffects": true,
@@ -36,7 +44,20 @@
   "engines": {
     "node": ">=22"
   },
+  "peerDependencies": {
+    "react": ">=18",
+    "react-native": ">=0.76"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "react-native": {
+      "optional": true
+    }
+  },
   "devDependencies": {
+    "esbuild": "^0.25.0",
     "jsdom": "^26.1.0",
     "vitest": "^3.2.4"
   }
