@@ -13,7 +13,7 @@ Pin an immutable release and add one element:
 ```html
 <script
   type="module"
-  src="https://cdn.jsdelivr.net/gh/djson9/magic-edit@v0.2.0/dist/magic-edit.js">
+  src="https://cdn.jsdelivr.net/gh/djson9/magic-edit@v0.4.0/dist/magic-edit.js">
 </script>
 
 <magic-edit
@@ -58,7 +58,7 @@ Comments remain ordinary thread messages. Selected-element context is appended t
 After the npm release is available:
 
 ```sh
-npm install @djson9/magic-edit@0.2.0
+npm install @djson9/magic-edit@0.4.0
 ```
 
 Then import the self-registering component once:
@@ -72,7 +72,7 @@ import '@djson9/magic-edit'
 Install the same package in a React Native app and run CocoaPods normally:
 
 ```sh
-npm install @djson9/magic-edit@0.2.0
+npm install @djson9/magic-edit@0.4.0
 cd ios && pod install
 ```
 
@@ -107,7 +107,7 @@ Magic Edit also owns the common push-to-live dispatcher. A registered app needs
 one workflow step:
 
 ```yaml
-- uses: djson9/magic-edit/.github/actions/deploy@v0.3.0
+- uses: djson9/magic-edit/.github/actions/deploy@v0.4.0
   with:
     target: my-app
 ```
@@ -134,3 +134,28 @@ Install the shared dispatcher once on a deployment host with
 root-owned JSON target and using the single workflow step above; the dispatcher
 owns diff classification and invokes only the adapter named by that protected
 registration.
+
+## Branded Git remote
+
+The same host can expose registered apps through `magicedit.dev`. Bootstrap the
+host once, then register each existing target:
+
+```sh
+sudo script/install-host
+sudo magic-edit-register-remote my-app
+```
+
+The app needs one local remote:
+
+```sh
+git remote add magic-edit git@magicedit.dev:my-app.git
+git config branch.magic-edit.pushRemote magic-edit
+```
+
+From then on, both `git push` while on the `magic-edit` branch and the explicit
+`git push magic-edit` publish the exact fast-forward commit to GitHub. GitHub's
+one-step workflow then selects hot reload, native release, or no-op. The shared
+SSH receiver accepts only one update to the target's registered branch, keeps
+incoming objects in Git quarantine until GitHub accepts them, and rejects
+deletes and force pushes. The public SSH policy allows only the key-authenticated
+`git` account, whose shell is `git-shell`; normal VM users remain tailnet-only.

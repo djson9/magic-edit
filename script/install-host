@@ -8,5 +8,27 @@ destination="${MAGIC_EDIT_DEPLOY_DESTINATION:-/usr/local/sbin/magic-edit-deploy}
 [ "$(id -u)" -eq 0 ] || { echo "install-host must run as root" >&2; exit 1; }
 [ -x "$repo/bin/magic-edit-deploy" ]
 install -D -o root -g root -m 0755 "$repo/bin/magic-edit-deploy" "$destination"
-[ "$("$destination" --version)" = "0.3.0" ]
-echo "Installed Magic Edit deploy dispatcher 0.3.0 at $destination"
+install -D -o root -g root -m 0755 \
+  "$repo/bin/magic-edit-receive" /usr/local/sbin/magic-edit-receive
+install -D -o root -g root -m 0755 \
+  "$repo/bin/magic-edit-register-remote" /usr/local/sbin/magic-edit-register-remote
+install -D -o root -g root -m 0755 \
+  "$repo/bin/magic-edit-enable-public-remote" /usr/local/sbin/magic-edit-enable-public-remote
+install -D -o root -g root -m 0755 \
+  "$repo/bin/magic-edit-pre-receive" /usr/local/libexec/magic-edit/pre-receive
+install -D -o root -g root -m 0440 \
+  "$repo/host/magic-edit-receive.sudoers" /etc/sudoers.d/magic-edit-receive
+visudo -cf /etc/sudoers.d/magic-edit-receive >/dev/null
+
+git_shell="$(command -v git-shell)"
+if ! id git >/dev/null 2>&1; then
+  useradd --system --create-home --home-dir /home/git --shell "$git_shell" git
+fi
+usermod --shell "$git_shell" git
+chown root:root /home/git
+chmod 0755 /home/git
+
+[ "$("$destination" --version)" = "0.4.0" ]
+[ "$(/usr/local/sbin/magic-edit-receive --version)" = "0.4.0" ]
+[ "$(/usr/local/sbin/magic-edit-register-remote --version)" = "0.4.0" ]
+echo "Installed Magic Edit host framework 0.4.0"

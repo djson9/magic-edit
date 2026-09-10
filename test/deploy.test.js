@@ -6,6 +6,8 @@ import { describe, expect, it } from 'vitest'
 
 const config = {
   schemaVersion: 1,
+  repository: 'djson9/coparenting',
+  branch: 'magic-edit',
   appRoot: 'apps/native',
   unknownAppChange: 'native-release',
   nativePaths: [
@@ -20,6 +22,17 @@ const config = {
     'apps/native/assets/*',
   ],
   ignorePaths: ['apps/native/README.md', 'apps/native/__tests__/*'],
+}
+
+function validateReceive(oldSha, newSha, ref) {
+  const directory = mkdtempSync(join(tmpdir(), 'magic-edit-receiver-'))
+  const configPath = join(directory, 'app.json')
+  writeFileSync(configPath, JSON.stringify(config))
+  return spawnSync(
+    'bash',
+    ['bin/magic-edit-receive', 'validate', configPath, oldSha, newSha, ref],
+    { cwd: process.cwd(), encoding: 'utf8' },
+  )
 }
 
 function classify(paths) {
@@ -57,5 +70,19 @@ describe('Magic Edit deployment classifier', () => {
     expect(
       classify(['apps/native/src/screens/Home.tsx', 'apps/native/ios/AppDelegate.swift']),
     ).toBe('native-release')
+  })
+})
+
+describe('Magic Edit Git receiver validation', () => {
+  const oldSha = '1'.repeat(40)
+  const newSha = '2'.repeat(40)
+
+  it('accepts the registered branch and a non-delete update', () => {
+    expect(validateReceive(oldSha, newSha, 'refs/heads/magic-edit').status).toBe(0)
+  })
+
+  it('rejects another branch and branch deletion', () => {
+    expect(validateReceive(oldSha, newSha, 'refs/heads/main').status).not.toBe(0)
+    expect(validateReceive(oldSha, '0'.repeat(40), 'refs/heads/magic-edit').status).not.toBe(0)
   })
 })

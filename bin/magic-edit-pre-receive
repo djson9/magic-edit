@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Generic pre-receive hook installed into each registered Magic Edit bare repo.
+set -euo pipefail
+
+target="$(git config --get magicedit.target)"
+[[ "$target" =~ ^[a-z0-9][a-z0-9-]*$ ]]
+
+count=0
+old_sha=
+new_sha=
+ref=
+while read -r candidate_old candidate_new candidate_ref; do
+  count=$((count + 1))
+  [ "$count" -eq 1 ] || {
+    echo "Magic Edit accepts one branch update per push" >&2
+    exit 1
+  }
+  old_sha="$candidate_old"
+  new_sha="$candidate_new"
+  ref="$candidate_ref"
+done
+[ "$count" -eq 1 ] || { echo "Magic Edit received no branch update" >&2; exit 1; }
+
+exec sudo -n /usr/local/sbin/magic-edit-receive \
+  "$target" "$old_sha" "$new_sha" "$ref"

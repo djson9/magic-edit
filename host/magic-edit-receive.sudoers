@@ -1,0 +1,2 @@
+Defaults!/usr/local/sbin/magic-edit-receive env_keep += "GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_QUARANTINE_PATH"
+git ALL=(root) NOPASSWD: /usr/local/sbin/magic-edit-receive *

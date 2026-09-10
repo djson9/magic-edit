@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Expose only the locked-down Git user on public SSH for a branded domain.
+set -euo pipefail
+
+version=0.4.0
+case "${1:-}" in
+  --version) printf '%s\n' "$version"; exit 0 ;;
+esac
+[ "$#" -eq 1 ] || { echo "usage: magic-edit-enable-public-remote PUBLIC_IPV4" >&2; exit 2; }
+[ "$(id -u)" -eq 0 ] || { echo "public remote setup must run as root" >&2; exit 1; }
+
+public_ip="$1"
+[[ "$public_ip" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]
+interface="$(ip -o -4 address show | awk -v ip="$public_ip" '$4 ~ ("^" ip "/") { print $2; exit }')"
+[ -n "$interface" ] || { echo "public IPv4 is not assigned to this host" >&2; exit 1; }
+
+destination=/etc/ssh/sshd_config.d/70-magic-edit-public.conf
+temporary="$(mktemp)"
+trap 'rm -f "$temporary"' EXIT
+printf '%s\n' \
+  "# Managed by magic-edit-enable-public-remote $version" \
+  "Match LocalAddress $public_ip" \
+  "    AllowUsers git" \
+  "    PasswordAuthentication no" \
+  "    KbdInteractiveAuthentication no" \
+  "    PermitRootLogin no" \
+  "Match all" >"$temporary"
+install -o root -g root -m 0644 "$temporary" "$destination"
+sshd -t
+systemctl reload ssh.service
+ufw allow in on "$interface" to "$public_ip" port 22 proto tcp \
+  comment 'Magic Edit Git remote'
+sshd -T -C "user=root,host=magicedit.dev,laddr=$public_ip,lport=22,addr=198.51.100.1" |
+  grep -qx 'allowusers git'
+echo "Public Magic Edit SSH is restricted to the git user on $public_ip:22"

@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+# Root-owned bridge from a branded Git remote to a registered GitHub branch.
+set -euo pipefail
+
+version=0.4.0
+config_root=/etc/magic-edit/apps
+remote_root=/home/git
+zero_sha=0000000000000000000000000000000000000000
+
+usage() {
+  cat <<'EOF'
+usage:
+  magic-edit-receive --version
+  magic-edit-receive validate CONFIG_JSON OLD_SHA NEW_SHA REF
+  magic-edit-receive TARGET OLD_SHA NEW_SHA REF
+EOF
+}
+
+validate_update() {
+  local config="$1" old_sha="$2" new_sha="$3" ref="$4"
+  local branch repository
+
+  jq -e '.schemaVersion == 1' "$config" >/dev/null
+  branch="$(jq -er '.branch' "$config")"
+  repository="$(jq -er '.repository' "$config")"
+  [[ "$repository" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]
+  [[ "$branch" =~ ^[A-Za-z0-9._/-]+$ ]]
+  git check-ref-format "refs/heads/$branch" >/dev/null
+  [[ "$old_sha" =~ ^[0-9a-f]{40}$ ]]
+  [[ "$new_sha" =~ ^[0-9a-f]{40}$ ]]
+  [ "$new_sha" != "$zero_sha" ]
+  [ "$ref" = "refs/heads/$branch" ]
+}
+
+case "${1:-}" in
+  --version)
+    printf '%s\n' "$version"
+    exit 0
+    ;;
+  validate)
+    [ "$#" -eq 5 ] || { usage >&2; exit 2; }
+    validate_update "$2" "$3" "$4" "$5"
+    exit
+    ;;
+esac
+
+[ "$#" -eq 4 ] || { usage >&2; exit 2; }
+[ "$(id -u)" -eq 0 ] || { echo "Magic Edit receive must run as root" >&2; exit 1; }
+
+target="$1"
+old_sha="$2"
+new_sha="$3"
+ref="$4"
+[[ "$target" =~ ^[a-z0-9][a-z0-9-]*$ ]]
+
+config="$config_root/$target.json"
+[ -f "$config" ] && [ ! -L "$config" ] || {
+  echo "registered Magic Edit target is unavailable: $target" >&2
+  exit 1
+}
+config_owner="$(stat -c %u "$config")"
+config_permissions="$(stat -c %a "$config")"
+[ "$config_owner" -eq 0 ] && [ $((8#$config_permissions & 022)) -eq 0 ] || {
+  echo "Magic Edit target configuration must be root-owned and not group/world writable" >&2
+  exit 1
+}
+validate_update "$config" "$old_sha" "$new_sha" "$ref"
+
+repository="$(jq -er '.repository' "$config")"
+branch="$(jq -er '.branch' "$config")"
+bare_repo="$remote_root/$target.git"
+[ -d "$bare_repo" ] && [ ! -L "$bare_repo" ] || {
+  echo "Magic Edit remote is unavailable: $target" >&2
+  exit 1
+}
+bare_repo="$(readlink -f "$bare_repo")"
+[ "$bare_repo" = "$remote_root/$target.git" ]
+[ "$(stat -c %u "$bare_repo")" -eq 0 ]
+[ $((8#$(stat -c %a "$bare_repo") & 022)) -eq 0 ]
+[ "$(git -c safe.directory="$bare_repo" --git-dir="$bare_repo" config --get magicedit.target)" = "$target" ]
+
+quarantine="$(readlink -f "${GIT_QUARANTINE_PATH:-/missing}")"
+object_directory="$(readlink -f "${GIT_OBJECT_DIRECTORY:-/missing}")"
+[ "$quarantine" = "$object_directory" ]
+case "$quarantine" in
+  "$bare_repo"/objects/tmp_objdir-incoming-*) ;;
+  *) echo "Magic Edit receive requires Git's protected quarantine" >&2; exit 1 ;;
+esac
+
+current_sha="$(git -c safe.directory="$bare_repo" --git-dir="$bare_repo" rev-parse --verify "$ref" 2>/dev/null || printf '%s' "$zero_sha")"
+[ "$current_sha" = "$old_sha" ] || {
+  echo "Magic Edit remote moved while receiving the push" >&2
+  exit 1
+}
+git -c safe.directory="$bare_repo" --git-dir="$bare_repo" cat-file -e "$new_sha^{commit}"
+if [ "$old_sha" != "$zero_sha" ]; then
+  git -c safe.directory="$bare_repo" --git-dir="$bare_repo" merge-base --is-ancestor "$old_sha" "$new_sha" || {
+    echo "Magic Edit only accepts fast-forward pushes" >&2
+    exit 1
+  }
+fi
+
+printf 'Publishing %s to %s/%s through Magic Edit...\n' "$new_sha" "$repository" "$branch"
+git -c safe.directory="$bare_repo" \
+  -c core.hooksPath=/dev/null \
+  --git-dir="$bare_repo" \
+  push --porcelain "git@github.com:$repository.git" \
+  "$new_sha:refs/heads/$branch"
+printf 'Deployment: https://github.com/%s/actions/workflows/magic-edit-live.yml\n' "$repository"

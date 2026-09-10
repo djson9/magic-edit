@@ -1,13 +1,15 @@
 {
   "name": "@djson9/magic-edit",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Shared web and React Native element selector for contextual ACP Web feedback.",
   "type": "module",
   "main": "./dist/magic-edit.js",
   "module": "./dist/magic-edit.js",
   "browser": "./dist/magic-edit.js",
   "bin": {
-    "magic-edit-deploy": "./bin/magic-edit-deploy"
+    "magic-edit-deploy": "./bin/magic-edit-deploy",
+    "magic-edit-receive": "./bin/magic-edit-receive",
+    "magic-edit-register-remote": "./bin/magic-edit-register-remote"
   },
   "exports": {
     ".": "./dist/magic-edit.js",
@@ -21,6 +23,7 @@
   "files": [
     "bin",
     "dist",
+    "host",
     "ios",
     "react-native",
     "DJSON9MagicEdit.podspec",

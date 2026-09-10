@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+# Register one existing Magic Edit target as a branded SSH Git remote.
+set -euo pipefail
+
+version=0.4.0
+config_root=/etc/magic-edit/apps
+remote_root=/home/git
+hook=/usr/local/libexec/magic-edit/pre-receive
+
+usage() {
+  echo "usage: magic-edit-register-remote [--check] TARGET" >&2
+}
+
+check=0
+case "${1:-}" in
+  --version) printf '%s\n' "$version"; exit 0 ;;
+  --check) check=1; shift ;;
+esac
+[ "$#" -eq 1 ] || { usage; exit 2; }
+[ "$(id -u)" -eq 0 ] || { echo "remote registration must run as root" >&2; exit 1; }
+
+target="$1"
+[[ "$target" =~ ^[a-z0-9][a-z0-9-]*$ ]]
+config="$config_root/$target.json"
+[ -f "$config" ] && [ ! -L "$config" ]
+[ "$(stat -c %u "$config")" -eq 0 ]
+[ $((8#$(stat -c %a "$config") & 022)) -eq 0 ]
+jq -e '.schemaVersion == 1' "$config" >/dev/null
+repository="$(jq -er '.repository' "$config")"
+branch="$(jq -er '.branch' "$config")"
+[[ "$repository" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]
+git check-ref-format "refs/heads/$branch" >/dev/null
+
+bare_repo="$remote_root/$target.git"
+verify() {
+  [ -d "$bare_repo" ] && [ ! -L "$bare_repo" ]
+  [ "$(stat -c %u "$remote_root")" -eq 0 ]
+  [ $((8#$(stat -c %a "$remote_root") & 022)) -eq 0 ]
+  [ "$(stat -c %u "$bare_repo")" -eq 0 ]
+  [ $((8#$(stat -c %a "$bare_repo") & 022)) -eq 0 ]
+  [ "$(git -c safe.directory="$bare_repo" --git-dir="$bare_repo" config --get magicedit.target)" = "$target" ]
+  [ "$(readlink -f "$bare_repo/hooks/pre-receive")" = "$hook" ]
+  [ "$(stat -c %u "$bare_repo/config")" -eq 0 ]
+  [ "$(stat -c %u "$bare_repo/hooks")" -eq 0 ]
+  sudo -u git test -w "$bare_repo/objects"
+  sudo -u git test -w "$bare_repo/refs"
+  git -c safe.directory="$bare_repo" --git-dir="$bare_repo" rev-parse --verify "refs/heads/$branch" >/dev/null
+}
+
+if [ "$check" -eq 1 ]; then
+  verify
+  printf 'Magic Edit remote %s is ready at git@magicedit.dev:%s.git\n' "$target" "$target"
+  exit
+fi
+
+[ -x "$hook" ] && [ ! -L "$hook" ]
+if [ ! -d "$bare_repo" ]; then
+  git init --bare --initial-branch="$branch" "$bare_repo" >/dev/null
+fi
+git -c safe.directory="$bare_repo" --git-dir="$bare_repo" config magicedit.target "$target"
+git -c safe.directory="$bare_repo" --git-dir="$bare_repo" config receive.denyDeletes true
+git -c safe.directory="$bare_repo" --git-dir="$bare_repo" config receive.denyNonFastForwards true
+git -c safe.directory="$bare_repo" --git-dir="$bare_repo" config gc.auto 0
+git -c safe.directory="$bare_repo" --git-dir="$bare_repo" symbolic-ref HEAD "refs/heads/$branch"
+git -c safe.directory="$bare_repo" -c core.hooksPath=/dev/null --git-dir="$bare_repo" \
+  fetch --quiet "git@github.com:$repository.git" \
+  "+refs/heads/$branch:refs/heads/$branch"
+
+chown root:root "$remote_root" "$bare_repo" "$bare_repo/config" "$bare_repo/HEAD"
+chmod 0755 "$remote_root" "$bare_repo"
+chown -R git:git "$bare_repo/objects" "$bare_repo/refs"
+chown -R root:root "$bare_repo/hooks"
+chmod 0755 "$bare_repo/hooks"
+ln -sfn "$hook" "$bare_repo/hooks/pre-receive"
+chown -h root:root "$bare_repo/hooks/pre-receive"
+verify
+printf 'Registered Magic Edit remote: git@magicedit.dev:%s.git\n' "$target"
