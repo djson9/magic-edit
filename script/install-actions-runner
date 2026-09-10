@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# One-time bootstrap for Magic Edit's dedicated infrastructure runner.
+set -euo pipefail
+
+runner_version=2.337.0
+runner_sha256=70920811a4f8ad4328818682bca5c6469c1c942fab52448868071d0063816613
+runner_user=magic-edit-actions-runner
+runner_root=/var/lib/magic-edit-actions-runner/app
+runner_name=jays-vm-magic-edit-infrastructure
+runner_label=magic-edit-infrastructure
+service=actions.runner.djson9-magic-edit.jays-vm-magic-edit-infrastructure.service
+archive="$runner_root/actions-runner-linux-x64-$runner_version.tar.gz"
+
+[ "$(id -u)" -eq 0 ] || {
+  echo "Magic Edit runner installation must run as root" >&2
+  exit 1
+}
+id "$runner_user" >/dev/null 2>&1 || {
+  echo "run script/install-host before installing the Actions runner" >&2
+  exit 1
+}
+
+install -d -o "$runner_user" -g "$runner_user" -m 0755 "$runner_root"
+if [ ! -x "$runner_root/bin/Runner.Listener" ]; then
+  curl --fail --location --silent --show-error \
+    "https://github.com/actions/runner/releases/download/v$runner_version/actions-runner-linux-x64-$runner_version.tar.gz" \
+    --output "$archive"
+  printf '%s  %s\n' "$runner_sha256" "$archive" | sha256sum --check --status
+  tar -xzf "$archive" -C "$runner_root"
+  chown -R "$runner_user:$runner_user" "$runner_root"
+  unlink "$archive"
+fi
+
+if [ ! -f "$runner_root/.runner" ]; then
+  [ -n "${RUNNER_TOKEN:-}" ] || {
+    echo "RUNNER_TOKEN is required for initial GitHub registration" >&2
+    exit 1
+  }
+  sudo -u "$runner_user" -H "$runner_root/config.sh" \
+    --url https://github.com/djson9/magic-edit \
+    --token "$RUNNER_TOKEN" \
+    --name "$runner_name" \
+    --labels "$runner_label" \
+    --work _work \
+    --unattended \
+    --replace
+fi
+unset RUNNER_TOKEN
+
+if ! systemctl cat "$service" >/dev/null 2>&1; then
+  "$runner_root/svc.sh" install "$runner_user"
+fi
+"$runner_root/svc.sh" start
+
+[ "$(systemctl is-active "$service")" = active ]
+[ "$("$runner_root/bin/Runner.Listener" --version)" = "$runner_version" ]
+printf 'Magic Edit infrastructure runner is active: %s\n' "$runner_name"

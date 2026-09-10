@@ -159,8 +159,15 @@ On the VM, bootstrap the host and the dedicated repository runner once:
 
 ```sh
 sudo script/install-host
+sudo RUNNER_TOKEN="$one_time_github_runner_token" script/install-actions-runner
 sudo script/configure-domain --apply
 ```
+
+`RUNNER_TOKEN` is the short-lived registration token returned by GitHub's
+repository Actions runner API. The installer verifies the pinned runner archive
+checksum, registers only `djson9/magic-edit`, and runs it as the unprivileged
+`magic-edit-actions-runner` user. Its sudo policy permits only the reconciler
+with the exact Actions checkout path.
 
 After that bootstrap, app registration is GitOps: merge
 `host/apps/my-app.json` to `main` and the
