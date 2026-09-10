@@ -2,7 +2,7 @@
 # Register one existing Magic Edit target as a branded SSH Git remote.
 set -euo pipefail
 
-version=0.4.6
+version=0.4.7
 config_root=/etc/magic-edit/apps
 remote_root=/home/git
 hook=/usr/local/libexec/magic-edit/pre-receive

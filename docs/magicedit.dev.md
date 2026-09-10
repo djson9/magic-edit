@@ -62,7 +62,9 @@ ssh root@jays-vm.tailade3f5.ts.net magic-edit-authorize-key \
 
 `magic-edit-authorize-key` keeps other authorized developer keys, replaces an
 existing copy of the submitted key, prefixes it with OpenSSH's `restrict`
-option, and makes the resulting authorization file root-owned.
+option, and makes the resulting authorization file root-owned and non-writable
+by `git`. The file is mode `0644` because OpenSSH reads it as `git`; authorized
+public keys are not secrets.
 
 Configure the client:
 
@@ -97,7 +99,7 @@ git config branch.magic-edit.pushRemote magic-edit
 The app workflow remains one step:
 
 ```yaml
-- uses: djson9/magic-edit/.github/actions/deploy@v0.4.6
+- uses: djson9/magic-edit/.github/actions/deploy@v0.4.7
   with:
     target: <target>
 ```

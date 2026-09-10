@@ -13,7 +13,7 @@ Pin an immutable release and add one element:
 ```html
 <script
   type="module"
-  src="https://cdn.jsdelivr.net/gh/djson9/magic-edit@v0.4.6/dist/magic-edit.js">
+  src="https://cdn.jsdelivr.net/gh/djson9/magic-edit@v0.4.7/dist/magic-edit.js">
 </script>
 
 <magic-edit
@@ -58,7 +58,7 @@ Comments remain ordinary thread messages. Selected-element context is appended t
 After the npm release is available:
 
 ```sh
-npm install @djson9/magic-edit@0.4.6
+npm install @djson9/magic-edit@0.4.7
 ```
 
 Then import the self-registering component once:
@@ -72,7 +72,7 @@ import '@djson9/magic-edit'
 Install the same package in a React Native app and run CocoaPods normally:
 
 ```sh
-npm install @djson9/magic-edit@0.4.6
+npm install @djson9/magic-edit@0.4.7
 cd ios && pod install
 ```
 
@@ -107,7 +107,7 @@ Magic Edit also owns the common push-to-live dispatcher. A registered app needs
 one workflow step:
 
 ```yaml
-- uses: djson9/magic-edit/.github/actions/deploy@v0.4.6
+- uses: djson9/magic-edit/.github/actions/deploy@v0.4.7
   with:
     target: my-app
 ```
