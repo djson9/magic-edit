@@ -1,0 +1,61 @@
+import { mkdtempSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { spawnSync } from 'node:child_process'
+import { describe, expect, it } from 'vitest'
+
+const config = {
+  schemaVersion: 1,
+  appRoot: 'apps/native',
+  unknownAppChange: 'native-release',
+  nativePaths: [
+    'apps/native/ios/*',
+    'apps/native/package.json',
+    'apps/native/package-lock.json',
+  ],
+  hotReloadPaths: [
+    'apps/native/App.tsx',
+    'apps/native/index.js',
+    'apps/native/src/*',
+    'apps/native/assets/*',
+  ],
+  ignorePaths: ['apps/native/README.md', 'apps/native/__tests__/*'],
+}
+
+function classify(paths) {
+  const directory = mkdtempSync(join(tmpdir(), 'magic-edit-classifier-'))
+  const configPath = join(directory, 'app.json')
+  writeFileSync(configPath, JSON.stringify(config))
+  const result = spawnSync('bash', ['bin/magic-edit-deploy', 'classify', configPath], {
+    cwd: process.cwd(),
+    encoding: 'utf8',
+    input: `${paths.join('\n')}\n`,
+  })
+  expect(result.stderr).toBe('')
+  expect(result.status).toBe(0)
+  return result.stdout.trim()
+}
+
+describe('Magic Edit deployment classifier', () => {
+  it('uses hot reload for runtime JavaScript and assets', () => {
+    expect(classify(['apps/native/src/screens/Home.tsx'])).toBe('hot-reload')
+    expect(classify(['apps/native/assets/icon.png'])).toBe('hot-reload')
+  })
+
+  it('publishes a native release for native or dependency changes', () => {
+    expect(classify(['apps/native/ios/AppDelegate.swift'])).toBe('native-release')
+    expect(classify(['apps/native/package-lock.json'])).toBe('native-release')
+    expect(classify(['apps/native/a-future-native-config.yml'])).toBe('native-release')
+  })
+
+  it('does nothing for docs, tests, and unrelated application files', () => {
+    expect(classify(['apps/native/README.md', 'rails/app/models/user.rb'])).toBe('noop')
+    expect(classify(['apps/native/__tests__/app.test.tsx'])).toBe('noop')
+  })
+
+  it('always prefers a native release when a commit mixes change classes', () => {
+    expect(
+      classify(['apps/native/src/screens/Home.tsx', 'apps/native/ios/AppDelegate.swift']),
+    ).toBe('native-release')
+  })
+})

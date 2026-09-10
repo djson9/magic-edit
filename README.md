@@ -100,3 +100,37 @@ npm test
 ```
 
 Version tags run tests, build the browser artifact, create a GitHub Release, and attach both `magic-edit.js` and the installable npm tarball. The public npm publish step uses npm trusted publishing after the package's initial registry version is established.
+
+## One-step live deployment
+
+Magic Edit also owns the common push-to-live dispatcher. A registered app needs
+one workflow step:
+
+```yaml
+- uses: djson9/magic-edit/.github/actions/deploy@v0.3.0
+  with:
+    target: my-app
+```
+
+The self-hosted runner keeps a root-owned `/etc/magic-edit/apps/my-app.json`
+registration. It declares the repository, branch, deployment adapter, last
+successful revision, app root, and path patterns for native releases, hot
+reloads, and ignored files. The shared dispatcher compares the pushed commit
+with the last successfully served revision and selects exactly one action:
+
+- `native-release` when iOS, dependencies, or an unknown app-level file changed;
+- `hot-reload` for declared runtime source and assets;
+- `noop` for docs, tests, or unrelated files.
+
+Registrations and adapters are root-owned, so a repository workflow cannot turn
+the reusable action into arbitrary privileged execution. Product-specific
+details—such as an Xcode scheme, bundle identifier, provisioning profile, Metro
+origin, and installer destination—remain in the registered adapter. The action
+and installed dispatcher must have the same release version or deployment
+fails closed.
+
+Install the shared dispatcher once on a deployment host with
+`sudo script/install-host`. Adding another app then consists of registering one
+root-owned JSON target and using the single workflow step above; the dispatcher
+owns diff classification and invokes only the adapter named by that protected
+registration.

@@ -1,0 +1,30 @@
+name: Magic Edit Deploy
+description: Classify and deploy one registered Magic Edit live target.
+
+inputs:
+  target:
+    description: Root-registered target name on the self-hosted deployment runner.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Deploy Magic Edit target
+      shell: bash
+      env:
+        MAGIC_EDIT_TARGET: ${{ inputs.target }}
+        MAGIC_EDIT_REPOSITORY: ${{ github.repository }}
+        MAGIC_EDIT_BRANCH: ${{ github.ref_name }}
+        MAGIC_EDIT_SHA: ${{ github.sha }}
+        MAGIC_EDIT_RUN_ID: ${{ github.run_id }}
+        MAGIC_EDIT_RUN_ATTEMPT: ${{ github.run_attempt }}
+      run: |
+        set -euo pipefail
+        test "$(sudo /usr/local/sbin/magic-edit-deploy --version)" = "0.3.0"
+        sudo /usr/local/sbin/magic-edit-deploy \
+          "$MAGIC_EDIT_TARGET" \
+          "$MAGIC_EDIT_REPOSITORY" \
+          "$MAGIC_EDIT_BRANCH" \
+          "$MAGIC_EDIT_SHA" \
+          "$MAGIC_EDIT_RUN_ID" \
+          "$MAGIC_EDIT_RUN_ATTEMPT"

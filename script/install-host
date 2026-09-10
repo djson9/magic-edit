@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Install the shared dispatcher once on a self-hosted Magic Edit runner.
+set -euo pipefail
+
+repo="$(cd "$(dirname "$0")/.." && pwd)"
+destination="${MAGIC_EDIT_DEPLOY_DESTINATION:-/usr/local/sbin/magic-edit-deploy}"
+
+[ "$(id -u)" -eq 0 ] || { echo "install-host must run as root" >&2; exit 1; }
+[ -x "$repo/bin/magic-edit-deploy" ]
+install -D -o root -g root -m 0755 "$repo/bin/magic-edit-deploy" "$destination"
+[ "$("$destination" --version)" = "0.3.0" ]
+echo "Installed Magic Edit deploy dispatcher 0.3.0 at $destination"

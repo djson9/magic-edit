@@ -1,0 +1,152 @@
+#!/usr/bin/env bash
+# Shared, fail-closed dispatcher for Magic Edit live deployments.
+set -euo pipefail
+
+version=0.3.0
+
+usage() {
+  cat <<'EOF'
+usage:
+  magic-edit-deploy --version
+  magic-edit-deploy classify CONFIG_JSON < changed-paths.txt
+  magic-edit-deploy TARGET REPOSITORY BRANCH SHA RUN_ID RUN_ATTEMPT
+EOF
+}
+
+classify() {
+  local config="$1"
+  local app_root unknown_mode mode path pattern matched
+
+  jq -e '.schemaVersion == 1' "$config" >/dev/null
+  app_root="$(jq -er '.appRoot' "$config")"
+  unknown_mode="$(jq -er '.unknownAppChange // "native-release"' "$config")"
+  case "$unknown_mode" in noop|hot-reload|native-release) ;; *) return 2 ;; esac
+
+  mode=noop
+  while IFS= read -r path; do
+    [ -n "$path" ] || continue
+    matched=0
+    while IFS= read -r pattern; do
+      if [[ "$path" == $pattern ]]; then
+        printf '%s\n' native-release
+        return 0
+      fi
+    done < <(jq -er '.nativePaths[]' "$config")
+    while IFS= read -r pattern; do
+      if [[ "$path" == $pattern ]]; then
+        mode=hot-reload
+        matched=1
+        break
+      fi
+    done < <(jq -er '.hotReloadPaths[]' "$config")
+    [ "$matched" -eq 1 ] && continue
+    while IFS= read -r pattern; do
+      if [[ "$path" == $pattern ]]; then
+        matched=1
+        break
+      fi
+    done < <(jq -er '.ignorePaths[]?' "$config")
+    [ "$matched" -eq 1 ] && continue
+    if [[ "$path" == "$app_root" || "$path" == "$app_root"/* ]]; then
+      if [ "$unknown_mode" = native-release ]; then
+        printf '%s\n' native-release
+        return 0
+      fi
+      [ "$unknown_mode" = hot-reload ] && mode=hot-reload
+    fi
+  done
+  printf '%s\n' "$mode"
+}
+
+case "${1:-}" in
+  --version)
+    printf '%s\n' "$version"
+    exit 0
+    ;;
+  classify)
+    [ "$#" -eq 2 ] || { usage >&2; exit 2; }
+    classify "$2"
+    exit
+    ;;
+esac
+
+[ "$#" -eq 6 ] || { usage >&2; exit 2; }
+[ "$(id -u)" -eq 0 ] || { echo "Magic Edit deploy must run as root" >&2; exit 1; }
+
+target="$1"
+repository="$2"
+branch="$3"
+requested_sha="$4"
+github_run_id="$5"
+github_run_attempt="$6"
+config_root="${MAGIC_EDIT_CONFIG_ROOT:-/etc/magic-edit/apps}"
+
+[[ "$target" =~ ^[a-z0-9][a-z0-9-]*$ ]]
+[[ "$repository" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]
+[[ "$branch" =~ ^[A-Za-z0-9._/-]+$ ]]
+[[ "$requested_sha" =~ ^[0-9a-f]{40}$ ]]
+[[ "$github_run_id" =~ ^[1-9][0-9]*$ ]]
+[[ "$github_run_attempt" =~ ^[1-9][0-9]*$ ]]
+
+config="$config_root/$target.json"
+[ -f "$config" ] && [ ! -L "$config" ] || {
+  echo "registered Magic Edit target is unavailable: $target" >&2
+  exit 1
+}
+owner="$(stat -c %u "$config" 2>/dev/null || stat -f %u "$config")"
+permissions="$(stat -c %a "$config" 2>/dev/null || stat -f %Lp "$config")"
+[ "$owner" -eq 0 ] && [ $((8#$permissions & 022)) -eq 0 ] || {
+  echo "Magic Edit target configuration must be root-owned and not group/world writable" >&2
+  exit 1
+}
+
+jq -e '.schemaVersion == 1' "$config" >/dev/null
+[ "$(jq -er '.repository' "$config")" = "$repository" ]
+[ "$(jq -er '.branch' "$config")" = "$branch" ]
+repo_path="$(jq -er '.repoPath' "$config")"
+repo_user="$(jq -er '.repoUser' "$config")"
+state_file="$(jq -er '.stateFile' "$config")"
+adapter="$(jq -er '.adapter' "$config")"
+[[ "$repo_path" = /* && "$state_file" = /* && "$adapter" = /* ]]
+[[ "$repo_user" =~ ^[a-z_][a-z0-9_-]*$ ]]
+[ -x "$adapter" ] && [ ! -L "$adapter" ]
+adapter_owner="$(stat -c %u "$adapter" 2>/dev/null || stat -f %u "$adapter")"
+adapter_permissions="$(stat -c %a "$adapter" 2>/dev/null || stat -f %Lp "$adapter")"
+[ "$adapter_owner" -eq 0 ] && [ $((8#$adapter_permissions & 022)) -eq 0 ] || {
+  echo "Magic Edit adapter must be root-owned and not group/world writable" >&2
+  exit 1
+}
+
+repo_git() {
+  sudo -u "$repo_user" -H git -C "$repo_path" "$@"
+}
+
+repo_git fetch --quiet origin "+refs/heads/$branch:refs/remotes/origin/$branch"
+repo_git cat-file -e "$requested_sha^{commit}"
+repo_git merge-base --is-ancestor "$requested_sha" "origin/$branch"
+
+previous_sha=""
+if [ -f "$state_file" ]; then
+  candidate="$(tr -d '[:space:]' <"$state_file")"
+  if [[ "$candidate" =~ ^[0-9a-f]{40}$ ]] &&
+     repo_git cat-file -e "$candidate^{commit}" 2>/dev/null &&
+     repo_git merge-base --is-ancestor "$candidate" "$requested_sha"; then
+    previous_sha="$candidate"
+  fi
+fi
+
+if [ -z "$previous_sha" ]; then
+  mode=native-release
+elif [ "$previous_sha" = "$requested_sha" ]; then
+  mode=noop
+else
+  changed_paths="$(mktemp)"
+  trap 'rm -f "$changed_paths"' EXIT
+  repo_git diff --name-only --diff-filter=ACDMRT "$previous_sha" "$requested_sha" >"$changed_paths"
+  mode="$(classify "$config" <"$changed_paths")"
+fi
+
+case "$mode" in noop|hot-reload|native-release) ;; *) exit 2 ;; esac
+printf 'Magic Edit target %s selected %s for %s\n' "$target" "$mode" "$requested_sha"
+exec "$adapter" "$mode" "$requested_sha" "$previous_sha" \
+  "$github_run_id" "$github_run_attempt"
