@@ -2,7 +2,7 @@
 # Register one existing Magic Edit target as a branded SSH Git remote.
 set -euo pipefail
 
-version=0.4.3
+version=0.4.4
 config_root=/etc/magic-edit/apps
 remote_root=/home/git
 hook=/usr/local/libexec/magic-edit/pre-receive
@@ -43,6 +43,7 @@ verify() {
   [ "$(stat -c %u "$bare_repo/config")" -eq 0 ]
   [ "$(stat -c %u "$bare_repo/hooks")" -eq 0 ]
   grep -Fxq "$bare_repo" < <(git config --system --get-all safe.directory)
+  grep -Fxq "$target.git" < <(git config --system --get-all safe.directory)
   sudo -u git test -w "$bare_repo/objects"
   sudo -u git test -w "$bare_repo/refs"
   git -c safe.directory="$bare_repo" --git-dir="$bare_repo" rev-parse --verify "refs/heads/$branch" >/dev/null
@@ -71,6 +72,9 @@ chown root:root "$remote_root" "$bare_repo" "$bare_repo/config" "$bare_repo/HEAD
 chmod 0755 "$remote_root" "$bare_repo"
 if ! grep -Fxq "$bare_repo" < <(git config --system --get-all safe.directory); then
   git config --system --add safe.directory "$bare_repo"
+fi
+if ! grep -Fxq "$target.git" < <(git config --system --get-all safe.directory); then
+  git config --system --add safe.directory "$target.git"
 fi
 chown -R git:git "$bare_repo/objects" "$bare_repo/refs"
 chown -R root:root "$bare_repo/hooks"
