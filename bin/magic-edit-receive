@@ -2,7 +2,7 @@
 # Root-owned bridge from a branded Git remote to a registered GitHub branch.
 set -euo pipefail
 
-version=0.4.4
+version=0.4.5
 config_root=/etc/magic-edit/apps
 remote_root=/home/git
 zero_sha=0000000000000000000000000000000000000000
