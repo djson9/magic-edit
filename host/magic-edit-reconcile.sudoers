@@ -1,0 +1,2 @@
+Cmnd_Alias MAGIC_EDIT_RECONCILE = /usr/local/sbin/magic-edit-reconcile-apps --apply /var/lib/magic-edit-actions-runner/app/_work/magic-edit/magic-edit/host/apps, /usr/local/sbin/magic-edit-reconcile-apps --check /var/lib/magic-edit-actions-runner/app/_work/magic-edit/magic-edit/host/apps, /usr/local/sbin/magic-edit-reconcile-apps --version
+magic-edit-actions-runner ALL=(root) NOPASSWD: MAGIC_EDIT_RECONCILE

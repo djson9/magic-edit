@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "repository": "djson9/coparenting",
+  "branch": "magic-edit",
+  "repoPath": "/home/davidson/workspace/coparenting",
+  "repoUser": "davidson",
+  "stateFile": "/var/lib/coparenting-magic-edit-live/source-revision",
+  "adapter": "/usr/local/sbin/coparenting-magic-edit-sync",
+  "appRoot": "apps/native",
+  "unknownAppChange": "native-release",
+  "nativePaths": [
+    ".apple-signing-tools-version",
+    "script/apple-signing-lane",
+    "apps/native/ios/*",
+    "apps/native/package.json",
+    "apps/native/package-lock.json",
+    "apps/native/Gemfile",
+    "apps/native/Gemfile.lock",
+    "apps/native/app.json",
+    "apps/native/react-native.config.js",
+    "apps/native/script/build_live_ota.sh",
+    "apps/native/script/make_live_ota_package.sh"
+  ],
+  "hotReloadPaths": [
+    "apps/native/App.tsx",
+    "apps/native/index.js",
+    "apps/native/src/*",
+    "apps/native/assets/*",
+    "apps/native/babel.config.js",
+    "apps/native/metro.config.js",
+    "apps/native/script/start_live_metro.sh",
+    "apps/native/script/com.davidjson.family-quill-live.metro.plist"
+  ],
+  "ignorePaths": [
+    "apps/native/README.md",
+    "apps/native/__tests__/*",
+    "apps/native/jest.config.js",
+    "apps/native/tsconfig.json",
+    "apps/native/.eslintrc.js",
+    "apps/native/script/ci_release_live_ota.sh"
+  ]
+}

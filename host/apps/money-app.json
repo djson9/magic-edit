@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "repository": "djson9/money-app",
+  "branch": "magic-edit",
+  "repoPath": "/home/davidson/workspace/money-app",
+  "repoUser": "davidson",
+  "stateFile": "/var/lib/money-app-magic-edit-live/source-revision",
+  "adapter": "/usr/local/sbin/money-app-magic-edit-sync",
+  "appRoot": "apps/native",
+  "unknownAppChange": "native-release",
+  "nativePaths": [
+    ".apple-signing-tools-version",
+    "scripts/apple-signing-lane",
+    "apps/ios/MoneyApp/*",
+    "apps/native/package.json",
+    "apps/native/package-lock.json",
+    "apps/native/app.json",
+    "apps/native/react-native.config.js",
+    "apps/native/scripts/ci-release-live-ota.sh",
+    "apps/ios/MoneyApp/scripts/build-live-ota.sh",
+    "apps/ios/MoneyApp/scripts/live-signing.json"
+  ],
+  "hotReloadPaths": [
+    "apps/native/App.tsx",
+    "apps/native/index.js",
+    "apps/native/src/*",
+    "apps/native/assets/*",
+    "apps/native/babel.config.js",
+    "apps/native/metro.config.js",
+    "apps/native/scripts/start-live-metro.sh",
+    "apps/native/scripts/com.financeapplabs.money-live.metro.plist"
+  ],
+  "ignorePaths": [
+    "apps/native/__tests__/*",
+    "apps/native/jest.config.js",
+    "apps/native/jest.setup.js",
+    "apps/native/tsconfig.json",
+    "apps/native/.eslintrc.js"
+  ]
+}
