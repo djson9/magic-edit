@@ -2,7 +2,7 @@
 # Shared, fail-closed dispatcher for Magic Edit live deployments.
 set -euo pipefail
 
-version=0.4.2
+version=0.4.3
 
 usage() {
   cat <<'EOF'
