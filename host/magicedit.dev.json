@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "domain": "magicedit.dev",
+  "publicIPv4": "178.105.73.243",
+  "dns": {
+    "provider": "porkbun",
+    "ttl": 600,
+    "apiKeyCredential": "porkbun-apikey",
+    "secretKeyCredential": "porkbun-secretkey"
+  },
+  "cloudFirewall": {
+    "provider": "hetzner",
+    "name": "firewall-1",
+    "apiTokenCredential": "hetzner-api",
+    "sshSourceIPv4": "0.0.0.0/0"
+  },
+  "ssh": {
+    "port": 22,
+    "user": "git",
+    "passwordAuthentication": false,
+    "permitRootLogin": false,
+    "disableForwarding": true,
+    "permitTTY": false
+  }
+}

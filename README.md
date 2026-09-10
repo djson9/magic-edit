@@ -13,7 +13,7 @@ Pin an immutable release and add one element:
 ```html
 <script
   type="module"
-  src="https://cdn.jsdelivr.net/gh/djson9/magic-edit@v0.4.5/dist/magic-edit.js">
+  src="https://cdn.jsdelivr.net/gh/djson9/magic-edit@v0.4.6/dist/magic-edit.js">
 </script>
 
 <magic-edit
@@ -58,7 +58,7 @@ Comments remain ordinary thread messages. Selected-element context is appended t
 After the npm release is available:
 
 ```sh
-npm install @djson9/magic-edit@0.4.5
+npm install @djson9/magic-edit@0.4.6
 ```
 
 Then import the self-registering component once:
@@ -72,7 +72,7 @@ import '@djson9/magic-edit'
 Install the same package in a React Native app and run CocoaPods normally:
 
 ```sh
-npm install @djson9/magic-edit@0.4.5
+npm install @djson9/magic-edit@0.4.6
 cd ios && pod install
 ```
 
@@ -107,7 +107,7 @@ Magic Edit also owns the common push-to-live dispatcher. A registered app needs
 one workflow step:
 
 ```yaml
-- uses: djson9/magic-edit/.github/actions/deploy@v0.4.5
+- uses: djson9/magic-edit/.github/actions/deploy@v0.4.6
   with:
     target: my-app
 ```
@@ -137,12 +137,27 @@ registration.
 
 ## Branded Git remote
 
-The same host can expose registered apps through `magicedit.dev`. Bootstrap the
-host once, then register each existing target:
+The same host can expose registered apps through `magicedit.dev`. The complete
+DNS, Hetzner firewall, restricted SSH, developer-key, Bitwarden, app onboarding,
+and verification procedure lives in
+[`docs/magicedit.dev.md`](docs/magicedit.dev.md). The public desired state is
+versioned in [`host/magicedit.dev.json`](host/magicedit.dev.json); credentials
+remain encrypted in SecretStash.
+
+On the VM, bootstrap and reconcile the host once, then register each existing
+target:
 
 ```sh
 sudo script/install-host
+sudo script/configure-domain --apply
 sudo magic-edit-register-remote my-app
+```
+
+Authorize a dedicated key from the developer machine:
+
+```sh
+ssh root@jays-vm.tailade3f5.ts.net magic-edit-authorize-key \
+  < ~/.ssh/magicedit_ed25519.pub
 ```
 
 The app needs one local remote:

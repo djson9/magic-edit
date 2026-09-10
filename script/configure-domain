@@ -1,0 +1,230 @@
+#!/usr/bin/env ruby
+# Reconcile the versioned magicedit.dev DNS, cloud firewall, and host policy.
+require "json"
+require "net/http"
+require "open3"
+require "securerandom"
+require "uri"
+
+ENV.delete("HTTP_PROXY")
+ENV.delete("HTTPS_PROXY")
+
+ROOT = File.expand_path("..", __dir__)
+DEFAULT_CONFIG = File.join(ROOT, "host", "magicedit.dev.json")
+SECRET_ROOT = "/etc/secrets/default"
+PORKBUN_API = "https://api.porkbun.com/api/json/v3"
+HETZNER_API = "https://api.hetzner.cloud/v1"
+
+mode = ARGV.first || "--check"
+abort "usage: configure-domain [--check|--apply] [CONFIG_JSON]" unless %w[--check --apply].include?(mode)
+config_path = File.expand_path(ARGV[1] || DEFAULT_CONFIG)
+abort "unexpected arguments" if ARGV.length > 2
+abort "configure-domain must run as root" unless Process.uid.zero?
+
+config = JSON.parse(File.binread(config_path))
+raise "unsupported domain config schema" unless config.fetch("schemaVersion") == 1
+domain = config.fetch("domain")
+public_ipv4 = config.fetch("publicIPv4")
+dns = config.fetch("dns")
+firewall_config = config.fetch("cloudFirewall")
+ssh = config.fetch("ssh")
+raise "unexpected domain" unless domain.match?(/\A[a-z0-9.-]+\z/)
+raise "unexpected public IPv4" unless public_ipv4.match?(/\A(?:[0-9]{1,3}\.){3}[0-9]{1,3}\z/)
+raise "unsupported DNS provider" unless dns.fetch("provider") == "porkbun"
+raise "unsupported cloud firewall provider" unless firewall_config.fetch("provider") == "hetzner"
+raise "unexpected SSH policy" unless ssh == {
+  "port" => 22,
+  "user" => "git",
+  "passwordAuthentication" => false,
+  "permitRootLogin" => false,
+  "disableForwarding" => true,
+  "permitTTY" => false
+}
+
+def credential(name)
+  raise "unexpected credential name" unless name.match?(/\A[a-zA-Z0-9_.-]{1,64}\z/)
+  path = File.join(SECRET_ROOT, "#{name}.cred")
+  raise "credential is unavailable: #{name}" unless File.file?(path) && !File.symlink?(path)
+  value, stderr, status = Open3.capture3(
+    "systemd-creds", "decrypt", "--name=#{name}", path, "-"
+  )
+  stderr.clear
+  raise "credential could not be loaded: #{name}" unless status.success?
+  value.strip
+end
+
+def json_request(method, base, path, headers:, body: nil)
+  uri = URI(base + path)
+  request_class = method == :get ? Net::HTTP::Get : Net::HTTP::Post
+  request = request_class.new(uri)
+  headers.each { |name, value| request[name] = value }
+  if body
+    request["Content-Type"] = "application/json"
+    request.body = JSON.generate(body)
+  end
+  response = Net::HTTP.start(uri.hostname, uri.port, use_ssl: true) do |client|
+    client.open_timeout = 10
+    client.read_timeout = 20
+    client.request(request)
+  end
+  document = JSON.parse(response.body)
+  raise "#{uri.host} returned HTTP #{response.code}" unless response.is_a?(Net::HTTPSuccess)
+  document
+end
+
+porkbun_key = nil
+porkbun_secret = nil
+hetzner_token = nil
+begin
+  porkbun_key = credential(dns.fetch("apiKeyCredential"))
+  porkbun_secret = credential(dns.fetch("secretKeyCredential"))
+  porkbun_headers = {
+    "X-API-Key" => porkbun_key,
+    "X-Secret-API-Key" => porkbun_secret
+  }
+  retrieve_dns = lambda do
+    document = json_request(
+      :get, PORKBUN_API, "/dns/retrieve/#{domain}", headers: porkbun_headers
+    )
+    code = document["code"]
+    raise "Porkbun DNS request failed#{code ? ": #{code}" : ""}" unless document["status"] == "SUCCESS"
+    document.fetch("records")
+  end
+  porkbun_write = lambda do |path, body|
+    document = json_request(
+      :post, PORKBUN_API, path,
+      headers: porkbun_headers.merge("Idempotency-Key" => SecureRandom.uuid),
+      body: body
+    )
+    code = document["code"]
+    raise "Porkbun DNS write failed#{code ? ": #{code}" : ""}" unless document["status"] == "SUCCESS"
+    document
+  end
+
+  records = retrieve_dns.call
+  apex_conflicts = records.select do |record|
+    record["name"] == domain && %w[A ALIAS].include?(record["type"])
+  end
+  desired = apex_conflicts.select do |record|
+    record["type"] == "A" && record["content"] == public_ipv4
+  end
+  if mode == "--apply"
+    retained = desired.first
+    apex_conflicts.reject { |record| record.equal?(retained) }.each do |record|
+      id = record.fetch("id")
+      raise "unexpected Porkbun record ID" unless id.match?(/\A[0-9]+\z/)
+      porkbun_write.call("/dns/delete/#{domain}/#{id}", {})
+    end
+    if desired.empty?
+      porkbun_write.call(
+        "/dns/create/#{domain}",
+        {
+          name: "",
+          type: "A",
+          content: public_ipv4,
+          ttl: dns.fetch("ttl"),
+          notes: "Magic Edit Git remote"
+        }
+      )
+    end
+    records = retrieve_dns.call
+    apex_conflicts = records.select do |record|
+      record["name"] == domain && %w[A ALIAS].include?(record["type"])
+    end
+  end
+  unless apex_conflicts.length == 1 &&
+         apex_conflicts.first["type"] == "A" &&
+         apex_conflicts.first["content"] == public_ipv4 &&
+         apex_conflicts.first["ttl"].to_i == dns.fetch("ttl")
+    raise "Porkbun apex DNS differs from the versioned desired state"
+  end
+
+  hetzner_token = credential(firewall_config.fetch("apiTokenCredential"))
+  hetzner_headers = {"Authorization" => "Bearer #{hetzner_token}"}
+  servers = json_request(:get, HETZNER_API, "/servers", headers: hetzner_headers).fetch("servers")
+  servers.select! { |server| server.dig("public_net", "ipv4", "ip") == public_ipv4 }
+  raise "expected exactly one Hetzner server for #{public_ipv4}" unless servers.length == 1
+  server_id = servers.first.fetch("id")
+  firewalls = json_request(:get, HETZNER_API, "/firewalls", headers: hetzner_headers).fetch("firewalls")
+  firewalls.select! do |firewall|
+    firewall["name"] == firewall_config.fetch("name") &&
+      firewall.fetch("applied_to").any? do |binding|
+        binding["type"] == "server" && binding.dig("server", "id") == server_id
+      end
+  end
+  raise "expected exactly one configured Hetzner firewall" unless firewalls.length == 1
+  firewall = firewalls.first
+  ssh_rule = {
+    "direction" => "in",
+    "protocol" => "tcp",
+    "port" => ssh.fetch("port").to_s,
+    "source_ips" => [firewall_config.fetch("sshSourceIPv4")],
+    "destination_ips" => [],
+    "description" => "Magic Edit Git remote (git-shell only)"
+  }
+  rule_present = firewall.fetch("rules").any? do |rule|
+    ssh_rule.all? { |key, value| rule[key] == value }
+  end
+  if mode == "--apply" && !rule_present
+    rules = firewall.fetch("rules") + [ssh_rule]
+    json_request(
+      :post, HETZNER_API,
+      "/firewalls/#{firewall.fetch("id")}/actions/set_rules",
+      headers: hetzner_headers,
+      body: {rules: rules}
+    )
+    20.times do
+      sleep 0.5
+      updated = json_request(
+        :get, HETZNER_API, "/firewalls/#{firewall.fetch("id")}", headers: hetzner_headers
+      ).fetch("firewall")
+      rule_present = updated.fetch("rules").any? do |rule|
+        ssh_rule.all? { |key, value| rule[key] == value }
+      end
+      break if rule_present
+    end
+  end
+  raise "Hetzner firewall differs from the versioned desired state" unless rule_present
+
+  if mode == "--apply"
+    command = ["/usr/local/sbin/magic-edit-enable-public-remote", public_ipv4]
+    raise "host SSH policy reconciliation failed" unless system(*command)
+  end
+  sshd_output, sshd_error, sshd_status = Open3.capture3(
+    "sshd", "-T", "-C",
+    "user=git,host=#{domain},laddr=#{public_ipv4},lport=#{ssh.fetch("port")},addr=198.51.100.1"
+  )
+  sshd_error.clear
+  raise "could not read effective sshd policy" unless sshd_status.success?
+  effective = sshd_output.lines.map(&:strip)
+  required_policy = [
+    "allowusers #{ssh.fetch("user")}",
+    "passwordauthentication no",
+    "permitrootlogin no",
+    "disableforwarding yes",
+    "permittty no"
+  ]
+  missing = required_policy.reject { |line| effective.include?(line) }
+  raise "host SSH policy differs: #{missing.join(", ")}" unless missing.empty?
+  addresses, address_error, address_status = Open3.capture3("ip", "-o", "-4", "address", "show")
+  address_error.clear
+  raise "public IPv4 is not assigned to the host" unless address_status.success? && addresses.include?("#{public_ipv4}/")
+  ufw_output, ufw_error, ufw_status = Open3.capture3("ufw", "status")
+  ufw_error.clear
+  ufw_rule = ufw_output.lines.any? do |line|
+    line.include?(public_ipv4) && line.include?("#{ssh.fetch("port")}/tcp") && line.include?("ALLOW")
+  end
+  raise "host UFW policy differs from desired state" unless ufw_status.success? && ufw_rule
+
+  puts JSON.generate(
+    status: "verified",
+    mode: mode.delete_prefix("--"),
+    domain: domain,
+    publicIPv4: public_ipv4,
+    sshPort: ssh.fetch("port")
+  )
+ensure
+  porkbun_key&.clear
+  porkbun_secret&.clear
+  hetzner_token&.clear
+end

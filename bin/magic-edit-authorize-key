@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# Install one restricted developer public key for the Magic Edit Git account.
+set -euo pipefail
+
+version=0.4.6
+case "${1:-}" in
+  --version) printf '%s\n' "$version"; exit 0 ;;
+esac
+[ "$#" -eq 0 ] || { echo "usage: magic-edit-authorize-key < KEY.pub" >&2; exit 2; }
+[ "$(id -u)" -eq 0 ] || { echo "key authorization must run as root" >&2; exit 1; }
+
+IFS= read -r public_key
+if IFS= read -r extra; then
+  echo "expected exactly one public key" >&2
+  exit 1
+fi
+algorithm="$(awk '{print $1}' <<<"$public_key")"
+blob="$(awk '{print $2}' <<<"$public_key")"
+[ "$algorithm" = ssh-ed25519 ]
+[[ "$blob" =~ ^[A-Za-z0-9+/]+={0,2}$ ]]
+
+key_file="$(mktemp)"
+authorized_file="$(mktemp)"
+trap 'rm -f "$key_file" "$authorized_file"' EXIT
+printf '%s\n' "$public_key" >"$key_file"
+chmod 0600 "$key_file"
+fingerprint="$(ssh-keygen -lf "$key_file" | awk '{print $2}')"
+
+destination=/home/git/.ssh/authorized_keys2
+install -d -o root -g root -m 0755 "$(dirname "$destination")"
+if [ -f "$destination" ]; then
+  awk -v blob="$blob" '
+    {
+      found = 0
+      for (field = 1; field <= NF; field += 1) {
+        if ($field == blob) found = 1
+      }
+      if (!found) print
+    }
+  ' "$destination" >"$authorized_file"
+fi
+printf 'restrict %s\n' "$public_key" >>"$authorized_file"
+install -o root -g root -m 0600 "$authorized_file" "$destination"
+grep -Fq " $blob " "$destination"
+printf 'Authorized restricted Magic Edit key %s\n' "$fingerprint"

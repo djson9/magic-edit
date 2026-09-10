@@ -15,6 +15,8 @@ install -D -o root -g root -m 0755 \
 install -D -o root -g root -m 0755 \
   "$repo/bin/magic-edit-enable-public-remote" /usr/local/sbin/magic-edit-enable-public-remote
 install -D -o root -g root -m 0755 \
+  "$repo/bin/magic-edit-authorize-key" /usr/local/sbin/magic-edit-authorize-key
+install -D -o root -g root -m 0755 \
   "$repo/bin/magic-edit-pre-receive" /usr/local/libexec/magic-edit/pre-receive
 install -D -o root -g root -m 0440 \
   "$repo/host/magic-edit-receive.sudoers" /etc/sudoers.d/magic-edit-receive
@@ -28,7 +30,8 @@ usermod --shell "$git_shell" git
 chown root:root /home/git
 chmod 0755 /home/git
 
-[ "$("$destination" --version)" = "0.4.5" ]
-[ "$(/usr/local/sbin/magic-edit-receive --version)" = "0.4.5" ]
-[ "$(/usr/local/sbin/magic-edit-register-remote --version)" = "0.4.5" ]
-echo "Installed Magic Edit host framework 0.4.5"
+[ "$("$destination" --version)" = "0.4.6" ]
+[ "$(/usr/local/sbin/magic-edit-receive --version)" = "0.4.6" ]
+[ "$(/usr/local/sbin/magic-edit-register-remote --version)" = "0.4.6" ]
+[ "$(/usr/local/sbin/magic-edit-authorize-key --version)" = "0.4.6" ]
+echo "Installed Magic Edit host framework 0.4.6"
