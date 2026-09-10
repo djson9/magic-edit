@@ -21,6 +21,7 @@ id "$runner_user" >/dev/null 2>&1 || {
 }
 
 install -d -o "$runner_user" -g "$runner_user" -m 0755 "$runner_root"
+cd "$runner_root"
 if [ ! -x "$runner_root/bin/Runner.Listener" ]; then
   curl --fail --location --silent --show-error \
     "https://github.com/actions/runner/releases/download/v$runner_version/actions-runner-linux-x64-$runner_version.tar.gz" \
