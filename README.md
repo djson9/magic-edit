@@ -130,10 +130,21 @@ and installed dispatcher must have the same release version or deployment
 fails closed.
 
 Install the shared dispatcher once on a deployment host with
-`sudo script/install-host`. Adding another app then consists of registering one
-root-owned JSON target and using the single workflow step above; the dispatcher
-owns diff classification and invokes only the adapter named by that protected
+`sudo script/install-host`. App registrations then live centrally in
+[`host/apps`](host/apps). Merging one new or changed JSON file to this
+repository's `main` branch triggers the protected infrastructure runner, which
+copies the validated desired state to `/etc/magic-edit/apps`, creates or updates
+the branded Git receiver, and verifies the result. The dispatcher owns diff
+classification and invokes only the adapter named by that protected
 registration.
+
+The repository checkout and root-owned product adapter named by a registration
+must already exist because they contain app-specific runtime, signing, and
+publication behavior. Once those product prerequisites exist, registration is
+one change in this repository—there is no separate VM command. Copy an existing
+file in `host/apps`, change its repository paths and change classifiers, and
+open a pull request. Removing a file does not delete live infrastructure;
+teardown is intentionally manual.
 
 ## Branded Git remote
 
@@ -144,14 +155,24 @@ and verification procedure lives in
 versioned in [`host/magicedit.dev.json`](host/magicedit.dev.json); credentials
 remain encrypted in SecretStash.
 
-On the VM, bootstrap and reconcile the host once, then register each existing
-target:
+On the VM, bootstrap the host and the dedicated repository runner once:
 
 ```sh
 sudo script/install-host
+sudo RUNNER_TOKEN="$one_time_github_runner_token" script/install-actions-runner
 sudo script/configure-domain --apply
-sudo magic-edit-register-remote my-app
 ```
+
+`RUNNER_TOKEN` is the short-lived registration token returned by GitHub's
+repository Actions runner API. The installer verifies the pinned runner archive
+checksum, registers only `djson9/magic-edit`, and runs it as the unprivileged
+`magic-edit-actions-runner` user. Its sudo policy permits only the reconciler
+with the exact Actions checkout path.
+
+After that bootstrap, app registration is GitOps: merge
+`host/apps/my-app.json` to `main` and the
+[`Reconcile Magic Edit Apps`](.github/workflows/reconcile-apps.yml) workflow
+converges and verifies the host automatically.
 
 Authorize a dedicated key from the developer machine:
 
@@ -208,11 +229,13 @@ revoke certificates and profiles.
 | Target | Custom remote | Live source | Native installer |
 |---|---|---|---|
 | ACP Web | `git@magicedit.dev:acp-web.git` | `http://100.108.87.81:8088` | `https://jays-vm.tailade3f5.ts.net:8447/live/latest/` |
+| Family Quill | `git@magicedit.dev:family-quill.git` | `http://100.108.87.81:8090` | `https://jays-vm.tailade3f5.ts.net:8451/live/latest/` |
 | Money App | `git@magicedit.dev:money-app.git` | `https://jays-vm.tailade3f5.ts.net:8466` | `https://jays-vm.tailade3f5.ts.net:8448/live/latest/` |
 
-Both reference apps keep Stable/production separate from their development
+The reference apps keep Stable/production separate from their development
 Live bundle identifier. Their permanent Mac worktrees and Metro LaunchAgents
 must stay running, and the Mac and test iPhone must remain on Tailscale for Fast
 Refresh. Product-specific commands and safeguards live in the
-[ACP Web guide](https://github.com/djson9/acp-web/blob/magic-edit/native/README.md#magic-edit-live-development)
+[ACP Web guide](https://github.com/djson9/acp-web/blob/magic-edit/native/README.md#magic-edit-live-development),
+[Family Quill guide](https://github.com/djson9/coparenting/blob/magic-edit/apps/native/README.md),
 and [Money App guide](https://github.com/djson9/money-app/blob/magic-edit/docs/magic-edit-live.md).

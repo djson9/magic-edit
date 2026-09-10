@@ -1,0 +1,194 @@
+#!/usr/bin/env bash
+# Reconcile version-controlled Magic Edit app registrations onto the host.
+set -euo pipefail
+
+version=0.4.7
+default_source_root=/var/lib/magic-edit-actions-runner/app/_work/magic-edit/magic-edit/host/apps
+config_root="${MAGIC_EDIT_CONFIG_ROOT:-/etc/magic-edit/apps}"
+register_remote="${MAGIC_EDIT_REGISTER_REMOTE:-/usr/local/sbin/magic-edit-register-remote}"
+expected_source_root="${MAGIC_EDIT_EXPECTED_SOURCE_ROOT:-$default_source_root}"
+repo_root="${MAGIC_EDIT_REPO_ROOT:-/home/davidson/workspace}"
+repo_user_required="${MAGIC_EDIT_REPO_USER:-davidson}"
+state_root="${MAGIC_EDIT_STATE_ROOT:-/var/lib}"
+adapter_root="${MAGIC_EDIT_ADAPTER_ROOT:-/usr/local/sbin}"
+
+usage() {
+  cat <<'EOF'
+usage:
+  magic-edit-reconcile-apps --version
+  magic-edit-reconcile-apps validate APP_CONFIG
+  magic-edit-reconcile-apps --apply APP_CONFIG_DIRECTORY
+  magic-edit-reconcile-apps --check APP_CONFIG_DIRECTORY
+EOF
+}
+
+stat_owner() {
+  stat -c %u "$1" 2>/dev/null || stat -f %u "$1"
+}
+
+stat_mode() {
+  stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"
+}
+
+validate_config() {
+  local config="$1" target repository repo_name branch repo_path repo_user
+  local state_file state_relative adapter adapter_relative app_root path
+
+  [ -f "$config" ] && [ ! -L "$config" ] || return 1
+  target="$(basename "$config" .json)"
+  [[ "$target" =~ ^[a-z0-9][a-z0-9-]*$ ]] || return 1
+
+  jq -e '
+    .schemaVersion == 1 and
+    (.repository | type == "string") and
+    (.branch | type == "string") and
+    (.repoPath | type == "string") and
+    (.repoUser | type == "string") and
+    (.stateFile | type == "string") and
+    (.adapter | type == "string") and
+    (.appRoot | type == "string") and
+    (.unknownAppChange == "noop" or
+      .unknownAppChange == "hot-reload" or
+      .unknownAppChange == "native-release") and
+    (.nativePaths | type == "array") and
+    all(.nativePaths[]; type == "string") and
+    (.hotReloadPaths | type == "array") and
+    all(.hotReloadPaths[]; type == "string") and
+    ((.ignorePaths // []) | type == "array") and
+    all((.ignorePaths // [])[]; type == "string") and
+    ((keys - [
+      "schemaVersion", "repository", "branch", "repoPath", "repoUser",
+      "stateFile", "adapter", "appRoot", "unknownAppChange", "nativePaths",
+      "hotReloadPaths", "ignorePaths"
+    ]) | length == 0)
+  ' "$config" >/dev/null || return 1
+
+  repository="$(jq -er '.repository' "$config")"
+  branch="$(jq -er '.branch' "$config")"
+  repo_path="$(jq -er '.repoPath' "$config")"
+  repo_user="$(jq -er '.repoUser' "$config")"
+  state_file="$(jq -er '.stateFile' "$config")"
+  adapter="$(jq -er '.adapter' "$config")"
+  app_root="$(jq -er '.appRoot' "$config")"
+
+  [[ "$repository" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || return 1
+  repo_name="${repository#*/}"
+  [ "$branch" = magic-edit ] || return 1
+  [ "$repo_path" = "$repo_root/$repo_name" ] || return 1
+  [ "$repo_user" = "$repo_user_required" ] || return 1
+  state_relative="${state_file#"$state_root/"}"
+  [ "$state_relative" != "$state_file" ] || return 1
+  [[ "$state_relative" =~ ^[a-z0-9][a-z0-9-]*-magic-edit-live/source-revision$ ]] || return 1
+  adapter_relative="${adapter#"$adapter_root/"}"
+  [ "$adapter_relative" != "$adapter" ] || return 1
+  [[ "$adapter_relative" =~ ^[a-z0-9][a-z0-9-]*-magic-edit-sync$ ]] || return 1
+  [[ "$app_root" =~ ^[A-Za-z0-9._/-]+$ ]] || return 1
+  [[ "$app_root" != /* && "/$app_root/" != *"/../"* ]] || return 1
+
+  while IFS= read -r path; do
+    [ -n "$path" ] || return 1
+    [[ "$path" != /* && "/$path/" != *"/../"* ]] || return 1
+    [[ "$path" != *$'\n'* && "$path" != *$'\r'* ]] || return 1
+  done < <(jq -er '.nativePaths[], .hotReloadPaths[], (.ignorePaths[]? // empty)' "$config")
+}
+
+case "${1:-}" in
+  --version)
+    printf '%s\n' "$version"
+    exit 0
+    ;;
+  validate)
+    [ "$#" -eq 2 ] || { usage >&2; exit 2; }
+    validate_config "$2"
+    printf 'Valid Magic Edit app registration: %s\n' "$(basename "$2" .json)"
+    exit 0
+    ;;
+  --apply|--check)
+    [ "$#" -eq 2 ] || { usage >&2; exit 2; }
+    mode="${1#--}"
+    source_root="$(cd "$2" && pwd -P)"
+    expected_source_root="$(cd "$expected_source_root" && pwd -P)"
+    ;;
+  *)
+    usage >&2
+    exit 2
+    ;;
+esac
+
+[ "$source_root" = "$expected_source_root" ] || {
+  echo "refusing untrusted app registration directory: $source_root" >&2
+  exit 1
+}
+
+if [ "$config_root" = /etc/magic-edit/apps ]; then
+  [ "$(id -u)" -eq 0 ] || {
+    echo "Magic Edit app reconciliation must run as root" >&2
+    exit 1
+  }
+  [ -x "$register_remote" ] && [ ! -L "$register_remote" ]
+fi
+
+shopt -s nullglob
+configs=("$source_root"/*.json)
+[ "${#configs[@]}" -gt 0 ] || {
+  echo "no Magic Edit app registrations found in $source_root" >&2
+  exit 1
+}
+
+for config in "${configs[@]}"; do
+  validate_config "$config"
+done
+
+if [ "$mode" = apply ]; then
+  install -d -m 0755 "$config_root"
+fi
+
+if [ "$config_root" = /etc/magic-edit/apps ]; then
+  [ "$(stat_owner "$config_root")" -eq 0 ]
+  [ $((8#$(stat_mode "$config_root") & 022)) -eq 0 ]
+fi
+
+for config in "${configs[@]}"; do
+  target="$(basename "$config" .json)"
+  destination="$config_root/$target.json"
+  adapter="$(jq -er '.adapter' "$config")"
+  repo_path="$(jq -er '.repoPath' "$config")"
+
+  [ -d "$repo_path" ] && [ ! -L "$repo_path" ] || {
+    echo "registered repository checkout is unavailable: $repo_path" >&2
+    exit 1
+  }
+  [ -x "$adapter" ] && [ ! -L "$adapter" ] || {
+    echo "registered deployment adapter is unavailable: $adapter" >&2
+    exit 1
+  }
+  if [ "$config_root" = /etc/magic-edit/apps ]; then
+    [ "$(stat_owner "$adapter")" -eq 0 ]
+    [ $((8#$(stat_mode "$adapter") & 022)) -eq 0 ]
+  fi
+
+  if [ "$mode" = apply ]; then
+    staged="$(mktemp "$config_root/.$target.json.XXXXXX")"
+    trap 'rm -f "${staged:-}"' EXIT
+    jq -S . "$config" >"$staged"
+    chmod 0644 "$staged"
+    if [ "$config_root" = /etc/magic-edit/apps ]; then
+      chown root:root "$staged"
+    fi
+    mv -f "$staged" "$destination"
+    staged=""
+    "$register_remote" "$target"
+  fi
+
+  [ -f "$destination" ] && [ ! -L "$destination" ]
+  cmp -s <(jq -S . "$config") <(jq -S . "$destination") || {
+    echo "installed Magic Edit registration differs: $target" >&2
+    exit 1
+  }
+  if [ "$config_root" = /etc/magic-edit/apps ]; then
+    [ "$(stat_owner "$destination")" -eq 0 ]
+    [ $((8#$(stat_mode "$destination") & 022)) -eq 0 ]
+  fi
+  "$register_remote" --check "$target"
+  printf 'Reconciled Magic Edit app: %s\n' "$target"
+done

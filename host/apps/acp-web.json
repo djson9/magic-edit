@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "repository": "djson9/acp-web",
+  "branch": "magic-edit",
+  "repoPath": "/home/davidson/workspace/acp-web",
+  "repoUser": "davidson",
+  "stateFile": "/var/lib/acp-web-magic-edit-live/source-revision",
+  "adapter": "/usr/local/sbin/acp-web-magic-edit-sync",
+  "appRoot": "native",
+  "unknownAppChange": "native-release",
+  "nativePaths": [
+    ".apple-signing-tools-version",
+    "script/apple-signing-lane",
+    "ios/LocalDictationKit/*",
+    "native/ios/*",
+    "native/package.json",
+    "native/package-lock.json",
+    "native/Gemfile",
+    "native/app.json",
+    "native/react-native.config.js",
+    "native/scripts/build-live-ota.sh",
+    "native/scripts/ci-release-live-ota.sh",
+    "native/scripts/live-signing.json",
+    "native/scripts/make-live-ota-package.sh"
+  ],
+  "hotReloadPaths": [
+    "native/App.tsx",
+    "native/index.js",
+    "native/src/*",
+    "native/assets/*",
+    "native/babel.config.js",
+    "native/metro.config.js",
+    "native/scripts/start-live-metro.sh",
+    "native/scripts/com.davidjson.acpweb.metro.plist"
+  ],
+  "ignorePaths": [
+    "native/README.md",
+    "native/__tests__/*",
+    "native/jest.config.js",
+    "native/tsconfig.json",
+    "native/.eslintrc.js"
+  ]
+}

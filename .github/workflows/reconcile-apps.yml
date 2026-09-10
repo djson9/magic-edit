@@ -1,0 +1,46 @@
+name: Reconcile Magic Edit Apps
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - host/apps/**
+      - .github/workflows/reconcile-apps.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: magic-edit-app-reconciliation
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    runs-on: [self-hosted, linux, x64, magic-edit-infrastructure]
+    timeout-minutes: 10
+    environment: magic-edit-infrastructure
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Reconcile registered apps
+        run: |
+          set -euo pipefail
+          test "$(sudo /usr/local/sbin/magic-edit-reconcile-apps --version)" = "0.4.7"
+          sudo /usr/local/sbin/magic-edit-reconcile-apps --apply "$GITHUB_WORKSPACE/host/apps"
+          sudo /usr/local/sbin/magic-edit-reconcile-apps --check "$GITHUB_WORKSPACE/host/apps"
+
+      - name: Record reconciled apps
+        run: |
+          {
+            echo '### Magic Edit app reconciliation'
+            echo
+            for config in host/apps/*.json; do
+              target="$(basename "$config" .json)"
+              repository="$(jq -r '.repository' "$config")"
+              echo "- \`$target\` → \`$repository\` → \`git@magicedit.dev:$target.git\`"
+            done
+          } >>"$GITHUB_STEP_SUMMARY"

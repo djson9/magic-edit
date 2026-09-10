@@ -16,8 +16,9 @@ never secret values.
 - Porkbun API access is enabled for this domain in the Porkbun account.
 - SecretStash on `jays-vm` contains raw credentials named
   `porkbun-apikey`, `porkbun-secretkey`, and `hetzner-api`.
-- The host has the app-specific root-owned target JSON and deployment adapter
-  described in the main README.
+- The host has the app-specific checkout and root-owned deployment adapter
+  described in the main README. The target JSON itself is reconciled from this
+  repository.
 - Root administration reaches the VM over Tailscale, not public SSH.
 
 Porkbun deliberately refuses DNS reads and writes until the account-side API
@@ -82,10 +83,12 @@ SecretStash unless a VM service actually needs to consume it.
 
 ## Register an app
 
-The protected `/etc/magic-edit/apps/<target>.json` must exist first. Then:
+Add one validated desired-state file at `host/apps/<target>.json` and merge it
+to `main`. The dedicated self-hosted runner automatically installs the
+root-owned copy and reconciles the branded receiver. Confirm the workflow named
+`Reconcile Magic Edit Apps` succeeded, then optionally verify it on the VM:
 
 ```sh
-sudo magic-edit-register-remote <target>
 sudo magic-edit-register-remote --check <target>
 ```
 
