@@ -2,7 +2,7 @@
 # Reconcile version-controlled Magic Edit app registrations onto the host.
 set -euo pipefail
 
-version=0.4.7
+version=0.4.8
 default_source_root=/var/lib/magic-edit-actions-runner/app/_work/magic-edit/magic-edit/host/apps
 config_root="${MAGIC_EDIT_CONFIG_ROOT:-/etc/magic-edit/apps}"
 register_remote="${MAGIC_EDIT_REGISTER_REMOTE:-/usr/local/sbin/magic-edit-register-remote}"

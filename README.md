@@ -13,7 +13,7 @@ Pin an immutable release and add one element:
 ```html
 <script
   type="module"
-  src="https://cdn.jsdelivr.net/gh/djson9/magic-edit@v0.4.7/dist/magic-edit.js">
+  src="https://cdn.jsdelivr.net/gh/djson9/magic-edit@v0.4.8/dist/magic-edit.js">
 </script>
 
 <magic-edit
@@ -58,7 +58,7 @@ Comments remain ordinary thread messages. Selected-element context is appended t
 After the npm release is available:
 
 ```sh
-npm install @djson9/magic-edit@0.4.7
+npm install @djson9/magic-edit@0.4.8
 ```
 
 Then import the self-registering component once:
@@ -72,7 +72,7 @@ import '@djson9/magic-edit'
 Install the same package in a React Native app and run CocoaPods normally:
 
 ```sh
-npm install @djson9/magic-edit@0.4.7
+npm install @djson9/magic-edit@0.4.8
 cd ios && pod install
 ```
 
@@ -107,7 +107,7 @@ Magic Edit also owns the common push-to-live dispatcher. A registered app needs
 one workflow step:
 
 ```yaml
-- uses: djson9/magic-edit/.github/actions/deploy@v0.4.7
+- uses: djson9/magic-edit/.github/actions/deploy@v0.4.8
   with:
     target: my-app
 ```
@@ -185,33 +185,33 @@ The app needs one local remote:
 
 ```sh
 git remote add magic-edit git@magicedit.dev:my-app.git
-git config branch.magic-edit.pushRemote magic-edit
+git config remote.magic-edit.push +HEAD:refs/heads/magic-edit
 ```
 
-From then on, both `git push` while on the `magic-edit` branch and the explicit
-`git push magic-edit` publish the exact fast-forward commit to GitHub. GitHub's
-one-step workflow then selects hot reload, native release, or no-op. The shared
-SSH receiver accepts only one update to the target's registered branch, keeps
-incoming objects in Git quarantine until GitHub accepts them, and rejects
-deletes and force pushes. The public SSH policy allows only the key-authenticated
-`git` account, whose shell is `git-shell`; normal VM users remain tailnet-only.
+From then on, `git push magic-edit` deploys the current `HEAD` from any local
+branch or worktree to the registered GitHub `magic-edit` deployment ref. Like a
+Heroku remote, deployment does not require the pushed commit to descend from the
+previous Live commit. The receiver updates GitHub with an exact lease on the
+currently advertised ref, keeps incoming objects in Git quarantine until
+GitHub accepts them, and still rejects deletes, multiple-ref pushes, and pushes
+to any other remote branch. The public SSH policy allows only the
+key-authenticated `git` account, whose shell is `git-shell`; normal VM users
+remain tailnet-only.
 
 ### Pushing an onboarded app
 
-Use the app's permanent `magic-edit` worktree and push normally:
+Push the current commit from any app worktree:
 
 ```sh
 git status --short
-git branch --show-current
-git push
+git push magic-edit
 ```
 
-The worktree must be clean before the host advances it, and the current branch
-must be `magic-edit`. The custom remote is an authenticated ingress rather than
-a second canonical repository: it validates the update, mirrors the exact SHA
-to the app's GitHub `magic-edit` branch, and lets the app's GitHub workflow call
-the shared dispatcher. A successful workflow records the selected mode and
-served revision in its job summary.
+The custom remote is an authenticated deployment ingress rather than a second
+canonical repository. Its `magic-edit` ref records the latest deployed commit,
+mirrors that exact SHA to GitHub, and lets the app's GitHub workflow call the
+shared dispatcher. A successful workflow records the selected mode and served
+revision in its job summary.
 
 Runtime source and assets take the hot-reload path. Native code, dependencies,
 and unknown files under the configured app root take the signed native-release
@@ -233,9 +233,9 @@ revoke certificates and profiles.
 | Money App | `git@magicedit.dev:money-app.git` | `https://jays-vm.tailade3f5.ts.net:8466` | `https://jays-vm.tailade3f5.ts.net:8448/live/latest/` |
 
 The reference apps keep Stable/production separate from their development
-Live bundle identifier. Their permanent Mac worktrees and Metro LaunchAgents
-must stay running, and the Mac and test iPhone must remain on Tailscale for Fast
-Refresh. Product-specific commands and safeguards live in the
+Live bundle identifier. Their deployment-owned source checkouts and Metro
+LaunchAgents must stay running, and the Mac and test iPhone must remain on
+Tailscale for Fast Refresh. Product-specific commands and safeguards live in the
 [ACP Web guide](https://github.com/djson9/acp-web/blob/magic-edit/native/README.md#magic-edit-live-development),
 [Family Quill guide](https://github.com/djson9/coparenting/blob/magic-edit/apps/native/README.md),
 and [Money App guide](https://github.com/djson9/money-app/blob/magic-edit/docs/magic-edit-live.md).

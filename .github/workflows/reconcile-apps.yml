@@ -29,7 +29,7 @@ jobs:
       - name: Reconcile registered apps
         run: |
           set -euo pipefail
-          test "$(sudo /usr/local/sbin/magic-edit-reconcile-apps --version)" = "0.4.7"
+          test "$(sudo /usr/local/sbin/magic-edit-reconcile-apps --version)" = "0.4.8"
           sudo /usr/local/sbin/magic-edit-reconcile-apps --apply "$GITHUB_WORKSPACE/host/apps"
           sudo /usr/local/sbin/magic-edit-reconcile-apps --check "$GITHUB_WORKSPACE/host/apps"
 
