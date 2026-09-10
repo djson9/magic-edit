@@ -2,7 +2,7 @@
 # Expose only the locked-down Git user on public SSH for a branded domain.
 set -euo pipefail
 
-version=0.4.1
+version=0.4.2
 case "${1:-}" in
   --version) printf '%s\n' "$version"; exit 0 ;;
 esac
@@ -32,8 +32,9 @@ sshd -t
 systemctl reload ssh.service
 ufw allow in on "$interface" to "$public_ip" port 22 proto tcp \
   comment 'Magic Edit Git remote'
-sshd -T -C "user=root,host=magicedit.dev,laddr=$public_ip,lport=22,addr=198.51.100.1" |
-  grep -qx 'allowusers git'
-sshd -T -C "user=git,host=magicedit.dev,laddr=$public_ip,lport=22,addr=198.51.100.1" |
-  grep -qx 'disableforwarding yes'
+root_policy="$(sshd -T -C "user=root,host=magicedit.dev,laddr=$public_ip,lport=22,addr=198.51.100.1")"
+git_policy="$(sshd -T -C "user=git,host=magicedit.dev,laddr=$public_ip,lport=22,addr=198.51.100.1")"
+grep -qx 'allowusers git' <<<"$root_policy"
+grep -qx 'disableforwarding yes' <<<"$git_policy"
+grep -qx 'permittty no' <<<"$git_policy"
 echo "Public Magic Edit SSH is restricted to the git user on $public_ip:22"
