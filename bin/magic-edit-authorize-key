@@ -2,7 +2,7 @@
 # Install one restricted developer public key for the Magic Edit Git account.
 set -euo pipefail
 
-version=0.4.7
+version=0.4.8
 case "${1:-}" in
   --version) printf '%s\n' "$version"; exit 0 ;;
 esac

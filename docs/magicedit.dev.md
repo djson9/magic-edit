@@ -2,7 +2,7 @@
 
 `magicedit.dev` is the branded SSH Git ingress for registered Magic Edit apps.
 It resolves to `jays-vm`, accepts only key-authenticated `git-shell` sessions,
-mirrors an exact fast-forward commit to the registered GitHub `magic-edit`
+mirrors an exact pushed commit to the registered GitHub `magic-edit` deployment
 branch, and lets the app's one-step GitHub workflow select hot reload, native
 publication, or no-op.
 
@@ -96,25 +96,25 @@ In the app checkout:
 
 ```sh
 git remote add magic-edit git@magicedit.dev:<target>.git
-git config branch.magic-edit.pushRemote magic-edit
+git config remote.magic-edit.push +HEAD:refs/heads/magic-edit
 ```
 
 The app workflow remains one step:
 
 ```yaml
-- uses: djson9/magic-edit/.github/actions/deploy@v0.4.7
+- uses: djson9/magic-edit/.github/actions/deploy@v0.4.8
   with:
     target: <target>
 ```
 
-From the `magic-edit` branch, plain `git push` now uses the branded remote.
+From any local branch or worktree, `git push magic-edit` now deploys `HEAD`.
 
 ## Verification
 
 ```sh
 dig +short @fortaleza.ns.porkbun.com A magicedit.dev
 git ls-remote git@magicedit.dev:<target>.git refs/heads/magic-edit
-git push
+git push magic-edit
 ```
 
 Require the authoritative DNS answer to be `178.105.73.243`, the remote ref to
@@ -122,6 +122,9 @@ match the intended local commit, and the resulting GitHub workflow to succeed.
 On the VM, `sudo script/configure-domain --check` and
 `sudo magic-edit-register-remote --check <target>` must both pass.
 
-Deletes, force pushes, multiple-ref pushes, unregistered branches, and unknown
-targets fail closed. Native iOS publication still uses the existing protected
-signing lane and never creates or revokes certificates.
+The registered `magic-edit` ref is a Heroku-style deployment ref, so a pushed
+commit may have unrelated history. The receiver mirrors it to GitHub with an
+exact lease on the advertised old SHA. Deletes, multiple-ref pushes,
+unregistered remote branches, and unknown targets still fail closed. Native iOS
+publication still uses the existing protected signing lane and never creates or
+revokes certificates.

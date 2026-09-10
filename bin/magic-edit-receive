@@ -2,7 +2,7 @@
 # Root-owned bridge from a branded Git remote to a registered GitHub branch.
 set -euo pipefail
 
-version=0.4.7
+version=0.4.8
 config_root=/etc/magic-edit/apps
 remote_root=/home/git
 zero_sha=0000000000000000000000000000000000000000
@@ -93,17 +93,11 @@ current_sha="$(git -c safe.directory="$bare_repo" --git-dir="$bare_repo" rev-par
   exit 1
 }
 git -c safe.directory="$bare_repo" --git-dir="$bare_repo" cat-file -e "$new_sha^{commit}"
-if [ "$old_sha" != "$zero_sha" ]; then
-  git -c safe.directory="$bare_repo" --git-dir="$bare_repo" merge-base --is-ancestor "$old_sha" "$new_sha" || {
-    echo "Magic Edit only accepts fast-forward pushes" >&2
-    exit 1
-  }
-fi
 
 printf 'Publishing %s to %s/%s through Magic Edit...\n' "$new_sha" "$repository" "$branch"
 git -c safe.directory="$bare_repo" \
   -c core.hooksPath=/dev/null \
   --git-dir="$bare_repo" \
-  push --porcelain "git@github.com:$repository.git" \
+  push --porcelain --force-with-lease="$ref:$old_sha" "git@github.com:$repository.git" \
   "$new_sha:refs/heads/$branch"
 printf 'Deployment: https://github.com/%s/actions/workflows/magic-edit-live.yml\n' "$repository"

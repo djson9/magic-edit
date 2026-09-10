@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -84,5 +84,14 @@ describe('Magic Edit Git receiver validation', () => {
   it('rejects another branch and branch deletion', () => {
     expect(validateReceive(oldSha, newSha, 'refs/heads/main').status).not.toBe(0)
     expect(validateReceive(oldSha, '0'.repeat(40), 'refs/heads/magic-edit').status).not.toBe(0)
+  })
+
+  it('treats the registered branch as a deploy ref instead of a history branch', () => {
+    const receiver = readFileSync('bin/magic-edit-receive', 'utf8')
+    const registration = readFileSync('bin/magic-edit-register-remote', 'utf8')
+
+    expect(receiver).not.toContain('merge-base --is-ancestor "$old_sha" "$new_sha"')
+    expect(receiver).toContain('--force-with-lease="$ref:$old_sha"')
+    expect(registration).toContain('config receive.denyNonFastForwards false')
   })
 })

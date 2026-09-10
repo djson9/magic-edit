@@ -20,7 +20,7 @@ runs:
         MAGIC_EDIT_RUN_ATTEMPT: ${{ github.run_attempt }}
       run: |
         set -euo pipefail
-        test "$(sudo /usr/local/sbin/magic-edit-deploy --version)" = "0.4.7"
+        test "$(sudo /usr/local/sbin/magic-edit-deploy --version)" = "0.4.8"
         sudo /usr/local/sbin/magic-edit-deploy \
           "$MAGIC_EDIT_TARGET" \
           "$MAGIC_EDIT_REPOSITORY" \

@@ -2,7 +2,7 @@
 # Register one existing Magic Edit target as a branded SSH Git remote.
 set -euo pipefail
 
-version=0.4.7
+version=0.4.8
 config_root=/etc/magic-edit/apps
 remote_root=/home/git
 hook=/usr/local/libexec/magic-edit/pre-receive
@@ -40,6 +40,7 @@ verify() {
   [ "$(stat -c %u "$bare_repo")" -eq 0 ]
   [ $((8#$(stat -c %a "$bare_repo") & 022)) -eq 0 ]
   [ "$(git -c safe.directory="$bare_repo" --git-dir="$bare_repo" config --get magicedit.target)" = "$target" ]
+  [ "$(git -c safe.directory="$bare_repo" --git-dir="$bare_repo" config --bool --get receive.denyNonFastForwards)" = false ]
   [ "$(git -c safe.directory="$bare_repo" --git-dir="$bare_repo" symbolic-ref HEAD)" = "$default_ref" ]
   [ "$(readlink -f "$bare_repo/hooks/pre-receive")" = "$hook" ]
   [ "$(stat -c %u "$bare_repo/config")" -eq 0 ]
@@ -63,7 +64,7 @@ if [ ! -d "$bare_repo" ]; then
 fi
 git -c safe.directory="$bare_repo" --git-dir="$bare_repo" config magicedit.target "$target"
 git -c safe.directory="$bare_repo" --git-dir="$bare_repo" config receive.denyDeletes true
-git -c safe.directory="$bare_repo" --git-dir="$bare_repo" config receive.denyNonFastForwards true
+git -c safe.directory="$bare_repo" --git-dir="$bare_repo" config receive.denyNonFastForwards false
 git -c safe.directory="$bare_repo" --git-dir="$bare_repo" config gc.auto 0
 git -c safe.directory="$bare_repo" -c core.hooksPath=/dev/null --git-dir="$bare_repo" \
   fetch --quiet "git@github.com:$repository.git" \

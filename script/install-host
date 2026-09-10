@@ -41,9 +41,9 @@ usermod --shell "$git_shell" git
 chown root:root /home/git
 chmod 0755 /home/git
 
-[ "$("$destination" --version)" = "0.4.7" ]
-[ "$(/usr/local/sbin/magic-edit-receive --version)" = "0.4.7" ]
-[ "$(/usr/local/sbin/magic-edit-register-remote --version)" = "0.4.7" ]
-[ "$(/usr/local/sbin/magic-edit-reconcile-apps --version)" = "0.4.7" ]
-[ "$(/usr/local/sbin/magic-edit-authorize-key --version)" = "0.4.7" ]
-echo "Installed Magic Edit host framework 0.4.7"
+[ "$("$destination" --version)" = "0.4.8" ]
+[ "$(/usr/local/sbin/magic-edit-receive --version)" = "0.4.8" ]
+[ "$(/usr/local/sbin/magic-edit-register-remote --version)" = "0.4.8" ]
+[ "$(/usr/local/sbin/magic-edit-reconcile-apps --version)" = "0.4.8" ]
+[ "$(/usr/local/sbin/magic-edit-authorize-key --version)" = "0.4.8" ]
+echo "Installed Magic Edit host framework 0.4.8"

@@ -1,4 +1,4 @@
-/* @djson9/magic-edit v0.4.7 | https://github.com/djson9/magic-edit */
+/* @djson9/magic-edit v0.4.8 | https://github.com/djson9/magic-edit */
 (() => {
   if (document.getElementById('magic-edit-styles')) return
   const style = document.createElement('style')
