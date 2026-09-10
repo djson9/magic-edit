@@ -174,3 +174,45 @@ SSH receiver accepts only one update to the target's registered branch, keeps
 incoming objects in Git quarantine until GitHub accepts them, and rejects
 deletes and force pushes. The public SSH policy allows only the key-authenticated
 `git` account, whose shell is `git-shell`; normal VM users remain tailnet-only.
+
+### Pushing an onboarded app
+
+Use the app's permanent `magic-edit` worktree and push normally:
+
+```sh
+git status --short
+git branch --show-current
+git push
+```
+
+The worktree must be clean before the host advances it, and the current branch
+must be `magic-edit`. The custom remote is an authenticated ingress rather than
+a second canonical repository: it validates the update, mirrors the exact SHA
+to the app's GitHub `magic-edit` branch, and lets the app's GitHub workflow call
+the shared dispatcher. A successful workflow records the selected mode and
+served revision in its job summary.
+
+Runtime source and assets take the hot-reload path. Native code, dependencies,
+and unknown files under the configured app root take the signed native-release
+path. Documentation, tests, and changes outside the app root take the no-op
+path. A no-op still advances the verified served revision, so the next diff is
+always calculated from the last successful push.
+
+Native signing remains a product-adapter responsibility. The reference iOS
+adapters use the existing approved Apple Development identity through a
+protected Mac GUI signing lane; Magic Edit does not create, import, replace, or
+revoke certificates and profiles.
+
+### Registered reference apps
+
+| Target | Custom remote | Live source | Native installer |
+|---|---|---|---|
+| ACP Web | `git@magicedit.dev:acp-web.git` | `http://100.108.87.81:8088` | `https://jays-vm.tailade3f5.ts.net:8447/live/latest/` |
+| Money App | `git@magicedit.dev:money-app.git` | `https://jays-vm.tailade3f5.ts.net:8466` | `https://jays-vm.tailade3f5.ts.net:8448/live/latest/` |
+
+Both reference apps keep Stable/production separate from their development
+Live bundle identifier. Their permanent Mac worktrees and Metro LaunchAgents
+must stay running, and the Mac and test iPhone must remain on Tailscale for Fast
+Refresh. Product-specific commands and safeguards live in the
+[ACP Web guide](https://github.com/djson9/acp-web/blob/magic-edit/native/README.md#magic-edit-live-development)
+and [Money App guide](https://github.com/djson9/money-app/blob/magic-edit/docs/magic-edit-live.md).
