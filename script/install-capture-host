@@ -32,7 +32,7 @@ install_caddy_block() {
   printf '\n\n' >>"$candidate"
   cat "$snippet" >>"$candidate"
   caddy fmt --overwrite "$candidate"
-  caddy validate --config "$candidate" >/dev/null
+  caddy validate --adapter caddyfile --config "$candidate" >/dev/null
   if ! cmp -s "$candidate" "$caddyfile"; then
     [ -f "$backup" ] || install -o root -g root -m 0644 "$caddyfile" "$backup"
     install -o root -g root -m 0644 "$candidate" "$caddyfile"
@@ -44,7 +44,7 @@ check_caddy_block() {
   grep -Fqx '# BEGIN magic-edit-capture managed block' "$caddyfile"
   grep -Fqx '# END magic-edit-capture managed block' "$caddyfile"
   grep -Fq 'reverse_proxy 127.0.0.1:8490' "$caddyfile"
-  caddy validate --config "$caddyfile" >/dev/null
+  caddy validate --adapter caddyfile --config "$caddyfile" >/dev/null
 }
 
 if [ "$mode" = --apply ]; then
