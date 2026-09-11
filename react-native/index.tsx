@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
+  AppState,
   Keyboard,
   type LayoutChangeEvent,
   Modal,
@@ -17,6 +18,8 @@ import {
   View,
   type ViewProps,
 } from 'react-native';
+import { uploadMagicEditCapture } from '../src/diagnostics/capture-client';
+import { diagnosticRuntime } from '../src/diagnostics/runtime';
 
 type MagicEditPhase = 'idle' | 'checking' | 'inspecting' | 'comment' | 'sending';
 type Point = { x: number; y: number };
@@ -36,6 +39,7 @@ type NativeSelectionResult = NativeSelection & { recipientThreadId?: string };
 type NativeCommentResult = { comment?: string; recipientThreadId?: string };
 export type MagicEditThreadLinkTarget = 'app' | 'web';
 type MagicEditSelectorModule = {
+  appMetadata?(): Promise<Record<string, unknown>>;
   cancel?(): void;
   composeComment?(
     selection: NativeSelection,
@@ -253,6 +257,10 @@ export function MagicEditBubble({
   const [position, setPosition] = useState<Point | null>(null);
   const [dragging, setDragging] = useState(false);
   const [pressed, setPressed] = useState(false);
+  const runtime = diagnosticRuntime();
+  const [diagnosticsAvailable, setDiagnosticsAvailable] = useState(
+    runtime.hasAttachedStore(),
+  );
   const layoutRef = useRef<Size>({ width: 0, height: 0 });
   const positionRef = useRef<Point | null>(null);
   const dragOriginRef = useRef<Point>({ x: 0, y: 0 });
@@ -264,6 +272,27 @@ export function MagicEditBubble({
   bottomInsetRef.current = bottomInset;
   phaseRef.current = phase;
   visibleRef.current = visible;
+
+  useEffect(() => runtime.subscribe(() => {
+    setDiagnosticsAvailable(runtime.hasAttachedStore());
+  }), [runtime]);
+
+  useEffect(() => {
+    const nativeSelector = selectorModule();
+    runtime.registerAppMetadata({
+      platform: Platform.OS,
+      osVersion: String(Platform.Version),
+    });
+    nativeSelector?.appMetadata?.().then(
+      metadata => runtime.registerAppMetadata(metadata),
+      error => runtime.recordError('native_app_metadata_failed', error),
+    );
+    runtime.recordRuntimeEvent('app_state_changed', { state: AppState.currentState });
+    const subscription = AppState.addEventListener('change', state => {
+      runtime.recordRuntimeEvent('app_state_changed', { state });
+    });
+    return () => subscription.remove();
+  }, [runtime]);
 
   const recipientThreadIds = useMemo(
     () => magicEditRecipientThreadIds(threadId, threadIds),
@@ -419,10 +448,54 @@ export function MagicEditBubble({
 
   const launchRef = useRef(launch);
   launchRef.current = launch;
+  const saveDebugMetadata = useCallback(async () => {
+    setPhase('checking');
+    try {
+      const capture = await uploadMagicEditCapture();
+      Alert.alert(
+        'Magic Edit capture saved',
+        `Capture ${capture.captureId}\n${capture.captureUrl}`,
+      );
+    } catch (error) {
+      Alert.alert(
+        'Could not save debug metadata',
+        error instanceof Error ? error.message : 'Please try again.',
+      );
+    } finally {
+      setPhase('idle');
+    }
+  }, []);
+  const activate = useCallback(() => {
+    if (!diagnosticsAvailable) {
+      launchRef.current().catch(() => {});
+      return;
+    }
+    Keyboard.dismiss();
+    const actions = recipientThreadIds.length ? [
+      {
+        text: 'Select interface element',
+        onPress: () => launchRef.current().catch(() => {}),
+      },
+      {
+        text: 'Save debug metadata',
+        onPress: () => { saveDebugMetadata().catch(() => {}); },
+      },
+      { text: 'Cancel', style: 'cancel' as const },
+    ] : [
+      {
+        text: 'Save debug metadata',
+        onPress: () => { saveDebugMetadata().catch(() => {}); },
+      },
+      { text: 'Cancel', style: 'cancel' as const },
+    ];
+    Alert.alert('Magic Edit', 'Choose what you want to do.', actions);
+  }, [diagnosticsAvailable, recipientThreadIds.length, saveDebugMetadata]);
+  const activateRef = useRef(activate);
+  activateRef.current = activate;
   const handleNativeTap = useCallback(() => {
     const currentPhase = phaseRef.current;
     if (currentPhase === 'idle') {
-      launchRef.current().catch(() => {});
+      activateRef.current();
       return;
     }
     if (currentPhase === 'sending') return;
@@ -464,7 +537,7 @@ export function MagicEditBubble({
       setPressed(false);
       setDragging(false);
       gestureWasDragRef.current = false;
-      if (shouldLaunch) launchRef.current().catch(() => {});
+      if (shouldLaunch) activateRef.current();
     },
     onPanResponderTerminate: () => {
       gestureWasDragRef.current = false;
@@ -506,7 +579,7 @@ export function MagicEditBubble({
           accessibilityState={{ disabled: phase !== 'idle' }}
           collapsable={false}
           onAccessibilityTap={() => {
-            if (phase === 'idle') launch().catch(() => {});
+            if (phase === 'idle') activateRef.current();
           }}
           style={[
             styles.dragHandle,

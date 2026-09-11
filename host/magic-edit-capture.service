@@ -1,0 +1,32 @@
+[Unit]
+Description=Magic Edit Phoenix capture API
+After=network-online.target b2-mount.service
+Wants=network-online.target
+Requires=b2-mount.service
+
+[Service]
+Type=simple
+User=davidson
+Group=davidson
+WorkingDirectory=/opt/magic-edit-capture/current
+Environment=HOME=/var/lib/magic-edit-capture
+Environment=LANG=C.UTF-8
+Environment=MAGIC_EDIT_PUBLIC_ORIGIN=https://magicedit.dev
+Environment=MAGIC_EDIT_STORAGE_ROOT=/mnt/b2/magic-edit
+Environment=PORT=8490
+Environment=RELEASE_REVISION=unknown
+Environment=SECRET_KEY_BASE=magic-edit-capture-has-no-cookie-or-session-state-00000000000000000000000000000000
+ExecStart=/opt/magic-edit-capture/current/bin/magic_edit_capture start
+Restart=on-failure
+RestartSec=3
+TimeoutStartSec=30
+TimeoutStopSec=20
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/mnt/b2/magic-edit /var/lib/magic-edit-capture
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

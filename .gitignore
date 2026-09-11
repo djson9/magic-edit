@@ -1,4 +1,6 @@
 node_modules/
 coverage/
 *.tgz
-
+capture_server/_build/
+capture_server/deps/
+capture_server/erl_crash.dump

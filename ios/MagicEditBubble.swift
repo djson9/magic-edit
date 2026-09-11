@@ -1653,6 +1653,21 @@ final class MagicEditSelectorModule: NSObject {
 
   @objc static func requiresMainQueueSetup() -> Bool { true }
 
+  @objc func appMetadata(
+    _ resolve: RCTPromiseResolveBlock,
+    rejecter reject: RCTPromiseRejectBlock
+  ) {
+    let bundle = Bundle.main
+    resolve([
+      "id": bundle.bundleIdentifier ?? "unknown-app",
+      "version": bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown",
+      "build": bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown",
+      "platform": "ios",
+      "osVersion": UIDevice.current.systemVersion,
+      "systemName": UIDevice.current.systemName,
+    ])
+  }
+
   @objc func select(
     _ targetThreads: NSArray,
     selectedThreadId: String,

@@ -1,0 +1,128 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+version=0.5.0
+release_root=/opt/magic-edit-capture
+state_root=/var/lib/magic-edit-capture
+service=magic-edit-capture.service
+health_url=http://127.0.0.1:8490/up
+runner_work_root=/var/lib/magic-edit-actions-runner/app/_work
+b2_root=/mnt/b2/magic-edit
+
+die() { echo "magic-edit-capture-deploy: $*" >&2; exit 1; }
+
+if [ "${1:-}" = --version ]; then
+  echo "$version"
+  exit 0
+fi
+
+wait_for_revision() {
+  local revision="$1"
+  local response
+  for _attempt in $(seq 1 40); do
+    response="$(curl --fail --silent --show-error --max-time 2 "$health_url" 2>/dev/null || true)"
+    if [ -n "$response" ] &&
+       [ "$(jq -r '.ok // false' <<<"$response")" = true ] &&
+       [ "$(jq -r '.revision // empty' <<<"$response")" = "$revision" ]; then
+      return 0
+    fi
+    sleep 0.5
+  done
+  return 1
+}
+
+deploy() {
+  [ "$#" -eq 2 ] || die "usage: magic-edit-capture-deploy deploy ARTIFACT SHA"
+  local artifact="$1"
+  local revision="$2"
+  [[ "$revision" =~ ^[0-9a-f]{40}$ ]] || die "invalid release SHA"
+  artifact="$(realpath -e "$artifact")"
+  case "$artifact" in
+    "$runner_work_root"/*) ;;
+    *) die "artifact is outside the Actions runner work root" ;;
+  esac
+  [ -f "$artifact" ] && [ ! -L "$artifact" ] || die "artifact is not a regular file"
+  systemctl is-active --quiet b2-mount.service || die "B2 mount service is inactive"
+  mountpoint -q /mnt/b2 || die "B2 is not mounted"
+  test -d "$b2_root" && runuser -u davidson -- test -w "$b2_root" ||
+    die "Magic Edit B2 root is not writable by the service account"
+
+  local releases="$release_root/releases"
+  local destination="$releases/$revision"
+  local incoming="$releases/.incoming-$revision-$$"
+  local previous=""
+  install -d -o root -g root -m 0755 "$release_root" "$releases"
+  install -d -o davidson -g davidson -m 0750 "$state_root"
+  if [ -L "$release_root/current" ]; then
+    previous="$(readlink -f "$release_root/current")"
+  fi
+
+  if [ ! -d "$destination" ]; then
+    mkdir "$incoming"
+    trap 'case "${incoming:-}" in /opt/magic-edit-capture/releases/.incoming-*) rm -rf "$incoming" ;; esac' EXIT
+    tar -xzf "$artifact" -C "$incoming"
+    [ -x "$incoming/bin/magic_edit_capture" ] || die "release executable is missing"
+    chown -R root:root "$incoming"
+    chmod -R go-w "$incoming"
+    mv "$incoming" "$destination"
+    trap - EXIT
+  fi
+
+  ln -sfn "$destination" "$release_root/current.next"
+  mv -Tf "$release_root/current.next" "$release_root/current"
+  install -d -o root -g root -m 0755 "/etc/systemd/system/$service.d"
+  local revision_environment
+  revision_environment="$(mktemp)"
+  printf '[Service]\nEnvironment=RELEASE_REVISION=%s\n' "$revision" >"$revision_environment"
+  install -o root -g root -m 0644 "$revision_environment" \
+    "/etc/systemd/system/$service.d/revision.conf"
+  rm -f "$revision_environment"
+  systemctl daemon-reload
+  systemctl restart "$service"
+  if ! wait_for_revision "$revision"; then
+    if [ -n "$previous" ] && [ -d "$previous" ]; then
+      local previous_revision
+      previous_revision="$(basename "$previous")"
+      ln -sfn "$previous" "$release_root/current.next"
+      mv -Tf "$release_root/current.next" "$release_root/current"
+      printf '[Service]\nEnvironment=RELEASE_REVISION=%s\n' "$previous_revision" \
+        >"/etc/systemd/system/$service.d/revision.conf"
+      systemctl daemon-reload
+      systemctl restart "$service"
+    fi
+    die "new release failed its local health check"
+  fi
+  printf '%s\n' "$revision" >"$state_root/revision"
+  chmod 0644 "$state_root/revision"
+  echo "Deployed Magic Edit capture API $revision"
+}
+
+delete_smoke() {
+  [ "$#" -eq 1 ] || die "usage: magic-edit-capture-deploy delete-smoke CAPTURE_ID"
+  local capture_id="$1"
+  [[ "$capture_id" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]] ||
+    die "invalid smoke capture ID"
+  local app_id=magic-edit-deploy-smoke
+  local app_hash
+  app_hash="$(printf '%s' "$app_id" | sha256sum | awk '{print $1}')"
+  local pointer="$b2_root/latest/$app_hash.json"
+  [ -f "$pointer" ] || die "smoke pointer is missing"
+  [ "$(jq -r '.appId' "$pointer")" = "$app_id" ] || die "latest pointer is not a smoke pointer"
+  [ "$(jq -r '.captureId' "$pointer")" = "$capture_id" ] || die "latest pointer does not match capture"
+  rm -f "$b2_root/captures/$capture_id.json" "$pointer"
+  echo "Deleted deployment smoke capture $capture_id"
+}
+
+case "${1:-}" in
+  deploy)
+    shift
+    deploy "$@"
+    ;;
+  delete-smoke)
+    shift
+    delete_smoke "$@"
+    ;;
+  *)
+    die "usage: magic-edit-capture-deploy [--version|deploy ARTIFACT SHA|delete-smoke CAPTURE_ID]"
+    ;;
+esac

@@ -1,6 +1,6 @@
 {
   "name": "@djson9/magic-edit",
-  "version": "0.4.8",
+  "version": "0.5.0",
   "description": "Shared web and React Native element selector for contextual ACP Web feedback.",
   "type": "module",
   "main": "./dist/magic-edit.js",
@@ -19,6 +19,16 @@
       "types": "./react-native/index.tsx",
       "react-native": "./dist/react-native.cjs",
       "default": "./dist/react-native.cjs"
+    },
+    "./redux": {
+      "types": "./redux/index.ts",
+      "react-native": "./dist/redux.cjs",
+      "default": "./dist/redux.cjs"
+    },
+    "./redux/testing": {
+      "types": "./redux/testing.ts",
+      "react-native": "./dist/redux-testing.cjs",
+      "default": "./dist/redux-testing.cjs"
     }
   },
   "files": [
@@ -28,6 +38,7 @@
     "ios",
     "docs",
     "react-native",
+    "redux",
     "script",
     "DJSON9MagicEdit.podspec",
     "README.md"
@@ -56,7 +67,8 @@
   },
   "peerDependencies": {
     "react": ">=18",
-    "react-native": ">=0.76"
+    "react-native": ">=0.76",
+    "redux": ">=4"
   },
   "peerDependenciesMeta": {
     "react": {
@@ -64,11 +76,15 @@
     },
     "react-native": {
       "optional": true
+    },
+    "redux": {
+      "optional": true
     }
   },
   "devDependencies": {
     "esbuild": "^0.25.0",
     "jsdom": "^26.1.0",
+    "redux": "^5.0.1",
     "vitest": "^3.2.4"
   }
 }

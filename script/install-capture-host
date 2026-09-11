@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo="$(cd "$(dirname "$0")/.." && pwd)"
+mode="${1:---apply}"
+[ "$mode" = --apply ] || [ "$mode" = --check ] || {
+  echo "usage: install-capture-host [--apply|--check]" >&2
+  exit 2
+}
+[ "$(id -u)" -eq 0 ] || { echo "install-capture-host must run as root" >&2; exit 1; }
+
+deployer=/usr/local/sbin/magic-edit-capture-deploy
+unit=/etc/systemd/system/magic-edit-capture.service
+sudoers=/etc/sudoers.d/magic-edit-capture
+caddyfile=/etc/caddy/Caddyfile
+snippet="$repo/host/magicedit.dev.caddy"
+state_root=/var/lib/magic-edit-capture
+b2_root=/mnt/b2/magic-edit
+
+install_caddy_block() {
+  local stripped candidate backup
+  stripped="$(mktemp)"
+  candidate="$(mktemp)"
+  backup="$state_root/Caddyfile.before-magic-edit-capture"
+  trap 'rm -f "$stripped" "$candidate"' RETURN
+  awk '
+    /^# BEGIN magic-edit-capture managed block$/ { skip=1; next }
+    /^# END magic-edit-capture managed block$/ { skip=0; next }
+    !skip { print }
+  ' "$caddyfile" >"$stripped"
+  sed -e '${/^$/d;}' "$stripped" >"$candidate"
+  printf '\n\n' >>"$candidate"
+  cat "$snippet" >>"$candidate"
+  caddy fmt --overwrite "$candidate"
+  caddy validate --config "$candidate" >/dev/null
+  if ! cmp -s "$candidate" "$caddyfile"; then
+    [ -f "$backup" ] || install -o root -g root -m 0644 "$caddyfile" "$backup"
+    install -o root -g root -m 0644 "$candidate" "$caddyfile"
+    systemctl reload caddy.service
+  fi
+}
+
+check_caddy_block() {
+  grep -Fqx '# BEGIN magic-edit-capture managed block' "$caddyfile"
+  grep -Fqx '# END magic-edit-capture managed block' "$caddyfile"
+  grep -Fq 'reverse_proxy 127.0.0.1:8490' "$caddyfile"
+  caddy validate --config "$caddyfile" >/dev/null
+}
+
+if [ "$mode" = --apply ]; then
+  systemctl is-active --quiet b2-mount.service
+  mountpoint -q /mnt/b2
+  install -d -o davidson -g davidson -m 0750 "$state_root"
+  sudo -u davidson install -d -m 0750 \
+    "$b2_root" "$b2_root/captures" "$b2_root/captures/.incoming" "$b2_root/latest"
+  install -D -o root -g root -m 0755 "$repo/bin/magic-edit-capture-deploy" "$deployer"
+  install -D -o root -g root -m 0644 "$repo/host/magic-edit-capture.service" "$unit"
+  install -D -o root -g root -m 0440 "$repo/host/magic-edit-capture.sudoers" "$sudoers"
+  visudo -cf "$sudoers" >/dev/null
+  install_caddy_block
+  systemctl daemon-reload
+  systemctl enable magic-edit-capture.service >/dev/null
+fi
+
+[ "$("$deployer" --version)" = 0.5.0 ]
+cmp -s "$repo/bin/magic-edit-capture-deploy" "$deployer"
+cmp -s "$repo/host/magic-edit-capture.service" "$unit"
+cmp -s "$repo/host/magic-edit-capture.sudoers" "$sudoers"
+visudo -cf "$sudoers" >/dev/null
+systemctl is-active --quiet b2-mount.service
+mountpoint -q /mnt/b2
+test -d "$b2_root/captures/.incoming"
+test -d "$b2_root/latest"
+sudo -u davidson test -w "$b2_root/captures/.incoming"
+sudo -u davidson test -w "$b2_root/latest"
+check_caddy_block
+echo "Magic Edit capture host is configured"

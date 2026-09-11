@@ -50,6 +50,17 @@ function classify(paths) {
 }
 
 describe('Magic Edit deployment classifier', () => {
+  it('ships syntactically valid capture host and deploy scripts', () => {
+    for (const script of ['bin/magic-edit-capture-deploy', 'script/install-capture-host']) {
+      const result = spawnSync('bash', ['-n', script], { cwd: process.cwd(), encoding: 'utf8' })
+      expect(result.stderr).toBe('')
+      expect(result.status).toBe(0)
+    }
+    expect(readFileSync('host/magic-edit-capture.sudoers', 'utf8')).toContain(
+      'magic-edit-capture-deploy deploy *',
+    )
+  })
+
   it('uses hot reload for runtime JavaScript and assets', () => {
     expect(classify(['apps/native/src/screens/Home.tsx'])).toBe('hot-reload')
     expect(classify(['apps/native/assets/icon.png'])).toBe('hot-reload')

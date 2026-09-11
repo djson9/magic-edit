@@ -32,3 +32,19 @@ await build({
   platform: 'neutral',
   target: ['es2022'],
 })
+await build({
+  entryPoints: [resolve(root, 'redux/index.ts')],
+  outfile: resolve(root, 'dist/redux.cjs'),
+  bundle: true,
+  format: 'cjs',
+  platform: 'neutral',
+  target: ['es2022'],
+})
+await build({
+  entryPoints: [resolve(root, 'redux/testing.ts')],
+  outfile: resolve(root, 'dist/redux-testing.cjs'),
+  bundle: true,
+  format: 'cjs',
+  platform: 'neutral',
+  target: ['es2022'],
+})
