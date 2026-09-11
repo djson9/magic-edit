@@ -28,6 +28,7 @@ function reducer(timing) {
       return { ...state, count: state.count + 1 }
     }
     if (action.type === 'counter/throw') throw new Error('reducer exploded')
+    if (action.type === 'counter/throw-undefined') throw undefined
     return state
   }
 }
@@ -114,6 +115,20 @@ describe('zero-configuration Redux diagnostics', () => {
       self: { $magicEditType: 'circular', path: '$.payload' },
     })
     expect(transition.threw).toMatchObject({ $magicEditType: 'error', message: 'reducer exploded' })
+
+    let caught = false
+    let thrown
+    try {
+      store.dispatch({ type: 'counter/throw-undefined' })
+    } catch (error) {
+      caught = true
+      thrown = error
+    }
+    expect(caught).toBe(true)
+    expect(thrown).toBeUndefined()
+    expect(getMagicEditDiagnosticSnapshot().redux.stores[0].transitions[1].threw).toEqual({
+      $magicEditType: 'undefined',
+    })
   })
 
   it('does not truncate action history and detects an action storm', () => {

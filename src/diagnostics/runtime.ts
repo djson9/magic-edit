@@ -164,7 +164,8 @@ export class MagicEditDiagnosticRuntime {
     startedAt: number,
     startedMonotonicAtMs: number,
     completedMonotonicAtMs: number,
-    thrown?: unknown,
+    didThrow: boolean,
+    thrown: unknown,
   ) {
     const store = this.storeStates.get(storeId)
     if (!store) return
@@ -184,7 +185,7 @@ export class MagicEditDiagnosticRuntime {
         noOp: before === after,
         action: normalizeDiagnosticValue(action),
         resultingState: normalizeDiagnosticValue(after),
-        ...(thrown === undefined ? {} : { threw: normalizeDiagnosticValue(thrown) }),
+        ...(didThrow ? { threw: normalizeDiagnosticValue(thrown) } : {}),
       }
       store.lastActionAt = startedAt
       store.currentState = transition.resultingState
@@ -222,9 +223,10 @@ export class MagicEditDiagnosticRuntime {
   beginNetwork(details: Record<string, unknown>) {
     const sequence = this.nextNetworkSequence++
     const now = this.clock.now()
+    const normalizedDetails = recordObject(normalizeDiagnosticValue(details))
     const record: Record<string, unknown> = {
       sequence,
-      ...details,
+      ...normalizedDetails,
       startedAt: iso(now),
       wallTimeMs: now,
       monotonicAtMs: this.clock.monotonicNow(),
@@ -247,7 +249,7 @@ export class MagicEditDiagnosticRuntime {
     if (!record) return
     const now = this.clock.now()
     const monotonic = this.clock.monotonicNow()
-    Object.assign(record, details, {
+    Object.assign(record, recordObject(normalizeDiagnosticValue(details)), {
       completedAt: iso(now),
       completedWallTimeMs: now,
       durationMs: Math.max(0, monotonic - Number(record.monotonicAtMs)),

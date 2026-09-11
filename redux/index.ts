@@ -9,9 +9,11 @@ export const magicEditMiddleware: Middleware = store => {
     const started = runtime.time()
     let result: unknown
     let thrown: unknown
+    let didThrow = false
     try {
       result = next(action)
     } catch (error) {
+      didThrow = true
       thrown = error
     }
     const completed = runtime.time()
@@ -23,9 +25,10 @@ export const magicEditMiddleware: Middleware = store => {
       started.now,
       started.monotonicNow,
       completed.monotonicNow,
+      didThrow,
       thrown,
     )
-    if (thrown !== undefined) throw thrown
+    if (didThrow) throw thrown
     return result
   }
 }
