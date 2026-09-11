@@ -170,7 +170,10 @@ for config in "${configs[@]}"; do
   if [ "$mode" = apply ]; then
     staged="$(mktemp "$config_root/.$target.json.XXXXXX")"
     trap 'rm -f "${staged:-}"' EXIT
-    jq -S . "$config" >"$staged"
+    # Preserve the validated descriptor byte-for-byte. App deployment adapters
+    # compare their committed descriptor with this root-owned copy so drift is
+    # detected without a formatter manufacturing a false mismatch.
+    cp "$config" "$staged"
     chmod 0644 "$staged"
     if [ "$config_root" = /etc/magic-edit/apps ]; then
       chown root:root "$staged"
@@ -181,7 +184,7 @@ for config in "${configs[@]}"; do
   fi
 
   [ -f "$destination" ] && [ ! -L "$destination" ]
-  cmp -s <(jq -S . "$config") <(jq -S . "$destination") || {
+  cmp -s "$config" "$destination" || {
     echo "installed Magic Edit registration differs: $target" >&2
     exit 1
   }

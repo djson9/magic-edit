@@ -1,4 +1,4 @@
-import { chmodSync, mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -69,16 +69,15 @@ describe('Magic Edit declarative app registrations', () => {
     mkdirSync(repos)
     mkdirSync(join(repos, 'example-app'))
     mkdirSync(state)
-    writeFileSync(
-      join(source, 'example-app.json'),
-      JSON.stringify({
+    const sourceConfig = join(source, 'example-app.json')
+    const sourceContents = JSON.stringify({
         ...validConfig,
         repoPath: join(repos, 'example-app'),
         repoUser: process.env.USER,
         stateFile: join(state, 'example-app-magic-edit-live/source-revision'),
         adapter,
-      }),
-    )
+      }, null, 3)
+    writeFileSync(sourceConfig, sourceContents)
     writeFileSync(
       register,
       '#!/bin/sh\ncase "$1" in --check) shift;; esac\ntest "$1" = example-app\n',
@@ -110,5 +109,6 @@ describe('Magic Edit declarative app registrations', () => {
     expect(first.status).toBe(0)
     expect(second.status).toBe(0)
     expect(check.status).toBe(0)
+    expect(readFileSync(join(installed, 'example-app.json'), 'utf8')).toBe(sourceContents)
   })
 })
