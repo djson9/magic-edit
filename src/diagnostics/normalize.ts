@@ -21,7 +21,7 @@ function bytesFromView(value: ArrayBuffer | ArrayBufferView) {
 
 /** Convert an arbitrary JavaScript graph into JSON-safe data without filtering or truncation. */
 export function normalizeDiagnosticValue(value: unknown): unknown {
-  const seen = new WeakMap<object, string>()
+  const ancestors = new WeakMap<object, string>()
 
   const visit = (candidate: unknown, path: string): unknown => {
     if (candidate === null || typeof candidate === 'string' || typeof candidate === 'boolean') {
@@ -38,76 +38,81 @@ export function normalizeDiagnosticValue(value: unknown): unknown {
     }
     if (typeof candidate !== 'object') return tag(typeof candidate, { value: String(candidate) })
 
-    const previousPath = seen.get(candidate)
+    const previousPath = ancestors.get(candidate)
     if (previousPath) return tag('circular', { path: previousPath })
-    seen.set(candidate, path)
+    ancestors.set(candidate, path)
 
-    if (candidate instanceof Date) {
-      return tag('date', { value: Number.isNaN(candidate.getTime()) ? 'Invalid Date' : candidate.toISOString() })
-    }
-    if (candidate instanceof Error) {
-      const normalized: Record<string, unknown> = {
-        name: candidate.name,
-        message: candidate.message,
-        stack: candidate.stack ?? null,
+    try {
+      if (candidate instanceof Date) {
+        return tag('date', { value: Number.isNaN(candidate.getTime()) ? 'Invalid Date' : candidate.toISOString() })
       }
+      if (candidate instanceof Error) {
+        const normalized: Record<string, unknown> = {
+          name: candidate.name,
+          message: candidate.message,
+          stack: candidate.stack ?? null,
+        }
+        for (const key of Object.keys(candidate)) {
+          try {
+            normalized[key] = visit((candidate as unknown as Record<string, unknown>)[key], `${path}.${key}`)
+          } catch (error) {
+            normalized[key] = tag('property-error', { error: String(error) })
+          }
+        }
+        return tag('error', normalized)
+      }
+      if (candidate instanceof Map) {
+        return tag('map', {
+          entries: Array.from(candidate.entries(), ([key, entry], index) => [
+            visit(key, `${path}.mapKey[${index}]`),
+            visit(entry, `${path}.mapValue[${index}]`),
+          ]),
+        })
+      }
+      if (candidate instanceof Set) {
+        return tag('set', {
+          values: Array.from(candidate.values(), (entry, index) => visit(entry, `${path}.set[${index}]`)),
+        })
+      }
+      if (candidate instanceof ArrayBuffer || ArrayBuffer.isView(candidate)) {
+        return tag(objectName(candidate), { bytes: bytesFromView(candidate as ArrayBuffer | ArrayBufferView) })
+      }
+      if (Array.isArray(candidate)) {
+        return candidate.map((entry, index) => visit(entry, `${path}[${index}]`))
+      }
+
+      const normalized: Record<string, unknown> = {}
+      const prototypeName = objectName(candidate)
+      if (prototypeName !== 'Object') normalized.$magicEditPrototype = prototypeName
       for (const key of Object.keys(candidate)) {
         try {
-          normalized[key] = visit((candidate as unknown as Record<string, unknown>)[key], `${path}.${key}`)
+          Object.defineProperty(normalized, key, {
+            configurable: true,
+            enumerable: true,
+            writable: true,
+            value: visit((candidate as Record<string, unknown>)[key], `${path}.${key}`),
+          })
         } catch (error) {
-          normalized[key] = tag('property-error', { error: String(error) })
+          Object.defineProperty(normalized, key, {
+            configurable: true,
+            enumerable: true,
+            writable: true,
+            value: tag('property-error', { error: String(error) }),
+          })
         }
       }
-      return tag('error', normalized)
+      return normalized
+    } finally {
+      ancestors.delete(candidate)
     }
-    if (candidate instanceof Map) {
-      return tag('map', {
-        entries: Array.from(candidate.entries(), ([key, entry], index) => [
-          visit(key, `${path}.mapKey[${index}]`),
-          visit(entry, `${path}.mapValue[${index}]`),
-        ]),
-      })
-    }
-    if (candidate instanceof Set) {
-      return tag('set', {
-        values: Array.from(candidate.values(), (entry, index) => visit(entry, `${path}.set[${index}]`)),
-      })
-    }
-    if (candidate instanceof ArrayBuffer || ArrayBuffer.isView(candidate)) {
-      return tag(objectName(candidate), { bytes: bytesFromView(candidate as ArrayBuffer | ArrayBufferView) })
-    }
-    if (Array.isArray(candidate)) {
-      return candidate.map((entry, index) => visit(entry, `${path}[${index}]`))
-    }
-
-    const normalized: Record<string, unknown> = {}
-    const prototypeName = objectName(candidate)
-    if (prototypeName !== 'Object') normalized.$magicEditPrototype = prototypeName
-    for (const key of Object.keys(candidate)) {
-      try {
-        Object.defineProperty(normalized, key, {
-          configurable: true,
-          enumerable: true,
-          writable: true,
-          value: visit((candidate as Record<string, unknown>)[key], `${path}.${key}`),
-        })
-      } catch (error) {
-        Object.defineProperty(normalized, key, {
-          configurable: true,
-          enumerable: true,
-          writable: true,
-          value: tag('property-error', { error: String(error) }),
-        })
-      }
-    }
-    return normalized
   }
 
   return visit(value, '$')
 }
 
 export function utf8ByteLength(value: string) {
-  if (typeof TextEncoder !== 'undefined') return new TextEncoder().encode(value).byteLength
+  const Encoder = (globalThis as { TextEncoder?: new () => { encode(input: string): Uint8Array } }).TextEncoder
+  if (Encoder) return new Encoder().encode(value).byteLength
   let bytes = 0
   for (let index = 0; index < value.length; index += 1) {
     const code = value.charCodeAt(index)

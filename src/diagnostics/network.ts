@@ -13,6 +13,20 @@ type NetworkInstallation = {
   xhrSetRequestHeader?: (...args: unknown[]) => unknown
 }
 
+type FetchInit = {
+  method?: string
+  headers?: unknown
+  body?: unknown
+}
+
+type ResponseLike = {
+  status: number
+  headers?: {
+    get?(name: string): string | null
+    forEach?(callback: (value: string, key: string) => void): void
+  }
+}
+
 const INSTALLATION_KEY = Symbol.for('@djson9/magic-edit/network-installation/v1')
 const XHR_RECORD_KEY = Symbol.for('@djson9/magic-edit/xhr-record/v1')
 
@@ -58,7 +72,7 @@ function bodyBytes(body: unknown): number | null {
   return null
 }
 
-function requestDetails(input: unknown, init?: RequestInit) {
+function requestDetails(input: unknown, init?: FetchInit) {
   const request = typeof Request !== 'undefined' && input instanceof Request ? input : null
   const initHeaders = headersRecord(init?.headers)
   const requestHeaders = Object.keys(initHeaders).length ? initHeaders : headersRecord(request?.headers)
@@ -70,13 +84,13 @@ function requestDetails(input: unknown, init?: RequestInit) {
   }
 }
 
-function responseBytes(response: Response) {
+function responseBytes(response: ResponseLike) {
   const contentLength = response.headers?.get?.('content-length')
   if (contentLength && /^\d+$/.test(contentLength)) return Number(contentLength)
   return null
 }
 
-function responseOutcome(response: Response) {
+function responseOutcome(response: ResponseLike) {
   return response.status >= 400 ? 'http_error' : 'success'
 }
 
@@ -121,13 +135,14 @@ export function installNetworkRecorder(runtime: RuntimeNetworkSink) {
   if (typeof root.fetch === 'function') {
     const originalFetch = root.fetch
     installation.fetch = originalFetch
-    root.fetch = function magicEditFetch(input: RequestInfo | URL, init?: RequestInit) {
+    root.fetch = function magicEditFetch(this: unknown, ...args: Parameters<typeof originalFetch>) {
+      const [input, init] = args
       const details = requestDetails(input, init)
-      if (internalUpload(details.requestHeaders)) return originalFetch.apply(this, [input, init])
+      if (internalUpload(details.requestHeaders)) return originalFetch.apply(this, args)
       const sequence = runtime.beginNetwork({ transport: 'fetch', ...details })
-      let request: Promise<Response>
+      let request: ReturnType<typeof originalFetch>
       try {
-        request = originalFetch.apply(this, [input, init])
+        request = originalFetch.apply(this, args)
       } catch (error) {
         runtime.completeNetwork(sequence, { outcome: errorOutcome(error), error })
         throw error
@@ -157,7 +172,7 @@ export function installNetworkRecorder(runtime: RuntimeNetworkSink) {
     installation.xhrSend = originalSend
     installation.xhrSetRequestHeader = originalSetRequestHeader
 
-    prototype.open = function magicEditOpen(method: string, url: string | URL, ...rest: unknown[]) {
+    prototype.open = function magicEditOpen(this: XMLHttpRequest, method: string, url: string | URL, ...rest: unknown[]) {
       ;(this as unknown as Record<PropertyKey, unknown>)[XHR_RECORD_KEY] = {
         method: String(method).toUpperCase(),
         url: String(url),
@@ -165,13 +180,13 @@ export function installNetworkRecorder(runtime: RuntimeNetworkSink) {
       }
       return originalOpen.apply(this, [method, url, ...rest])
     } as typeof prototype.open
-    prototype.setRequestHeader = function magicEditSetRequestHeader(name: string, value: string) {
+    prototype.setRequestHeader = function magicEditSetRequestHeader(this: XMLHttpRequest, name: string, value: string) {
       const metadata = (this as unknown as Record<PropertyKey, unknown>)[XHR_RECORD_KEY] as Record<string, unknown> | undefined
       const headers = metadata?.requestHeaders as Record<string, string> | undefined
       if (headers) headers[name] = headers[name] ? `${headers[name]}, ${value}` : String(value)
       return originalSetRequestHeader.apply(this, [name, value])
     } as typeof prototype.setRequestHeader
-    prototype.send = function magicEditSend(body?: Document | XMLHttpRequestBodyInit | null) {
+    prototype.send = function magicEditSend(this: XMLHttpRequest, body?: unknown) {
       const metadata = (this as unknown as Record<PropertyKey, unknown>)[XHR_RECORD_KEY] as Record<string, unknown> | undefined
       const requestHeaders = headersRecord(metadata?.requestHeaders)
       if (!metadata || internalUpload(requestHeaders)) return originalSend.apply(this, [body])

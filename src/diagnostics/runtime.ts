@@ -27,9 +27,10 @@ type RuntimeListener = () => void
 
 const DEFAULT_CLOCK: DiagnosticClock = {
   now: () => Date.now(),
-  monotonicNow: () => typeof performance !== 'undefined' && typeof performance.now === 'function'
-    ? performance.now()
-    : Date.now(),
+  monotonicNow: () => {
+    const candidate = (globalThis as { performance?: { now?: () => number } }).performance
+    return typeof candidate?.now === 'function' ? candidate.now() : Date.now()
+  },
 }
 
 const GLOBAL_KEY = Symbol.for('@djson9/magic-edit/diagnostics/v1')
@@ -79,8 +80,14 @@ function actionStormCount(transitions: Array<Record<string, unknown>>) {
   let start = 0
   let insideStorm = false
   for (let end = 0; end < transitions.length; end += 1) {
-    const endAt = Number(transitions[end].wallTimeMs)
-    while (start < end && endAt - Number(transitions[start].wallTimeMs) > 1000) start += 1
+    const endTransition = transitions[end]
+    if (!endTransition) continue
+    const endAt = Number(endTransition.wallTimeMs)
+    while (start < end) {
+      const startTransition = transitions[start]
+      if (!startTransition || endAt - Number(startTransition.wallTimeMs) <= 1000) break
+      start += 1
+    }
     const isStorm = end - start + 1 >= 20
     if (isStorm && !insideStorm) storms += 1
     insideStorm = isStorm
@@ -102,10 +109,16 @@ export class MagicEditDiagnosticRuntime {
   private runtimeEvents: Array<Record<string, unknown>> = []
   private recorderErrors: Array<Record<string, unknown>> = []
   private listeners = new Set<RuntimeListener>()
-  private appMetadata: Record<string, unknown> = {
-    id: typeof location !== 'undefined' && location.host ? location.host : 'unknown-app',
-    platform: typeof navigator !== 'undefined' ? navigator.platform || 'unknown' : 'unknown',
-  }
+  private appMetadata: Record<string, unknown> = (() => {
+    const environment = globalThis as {
+      location?: { host?: string }
+      navigator?: { platform?: string }
+    }
+    return {
+      id: environment.location?.host || 'unknown-app',
+      platform: environment.navigator?.platform || 'unknown',
+    }
+  })()
   private networkInstalled = false
   private stallTimer: ReturnType<typeof setInterval> | null = null
 
@@ -392,6 +405,7 @@ export class MagicEditDiagnosticRuntime {
     const url = details.url
     for (let index = this.networkRequests.length - 1; index >= 0; index -= 1) {
       const previous = this.networkRequests[index]
+      if (!previous) continue
       if (previous.method !== method || previous.url !== url) continue
       const outcome = previous.outcome
       const status = Number(previous.status)
