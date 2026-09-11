@@ -47,3 +47,7 @@ chmod 0755 /home/git
 [ "$(/usr/local/sbin/magic-edit-reconcile-apps --version)" = "0.4.8" ]
 [ "$(/usr/local/sbin/magic-edit-authorize-key --version)" = "0.4.8" ]
 echo "Installed Magic Edit host framework 0.4.8"
+
+if [ -x "$repo/script/install-capture-host" ]; then
+  "$repo/script/install-capture-host" --apply
+fi

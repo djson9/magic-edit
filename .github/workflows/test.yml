@@ -21,3 +21,21 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run pack:check
+
+  capture-api:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: capture_server
+    steps:
+      - uses: actions/checkout@v6
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: "1.18.4"
+          otp-version: "27.3.4"
+      - run: mix local.hex --force
+      - run: mix local.rebar --force
+      - run: mix deps.get
+      - run: mix format --check-formatted
+      - run: mix compile --warnings-as-errors
+      - run: mix test

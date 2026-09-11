@@ -239,3 +239,39 @@ Tailscale for Fast Refresh. Product-specific commands and safeguards live in the
 [ACP Web guide](https://github.com/djson9/acp-web/blob/magic-edit/native/README.md#magic-edit-live-development),
 [Family Quill guide](https://github.com/djson9/coparenting/blob/magic-edit/apps/native/README.md),
 and [Money App guide](https://github.com/djson9/money-app/blob/magic-edit/docs/magic-edit-live.md).
+## Zero-configuration Redux diagnostics
+
+Add the shared middleware to every Redux store that should appear in a Magic
+Edit capture:
+
+```ts
+import { magicEditMiddleware } from '@djson9/magic-edit/redux'
+
+const store = configureStore({
+  reducer,
+  middleware: getDefaultMiddleware =>
+    getDefaultMiddleware().concat(magicEditMiddleware),
+})
+```
+
+There is no diagnostics initializer, config object, selector, callback, logging
+API, telemetry API, console interception, or network setup. The middleware
+records every action and resulting state for the process lifetime, derives
+Redux Toolkit async-operation and dispatch timing, and installs idempotent
+`fetch` plus `XMLHttpRequest` observation. Version 0.5.0 intentionally applies
+no redaction, truncation, history limit, or artifact-size cap; request and
+response bodies are excluded because observing them can alter stream behavior.
+
+The existing React Native `MagicEditBubble` discovers the same process-wide
+singleton automatically. When a store is attached, tapping the bubble offers
+`Save debug metadata`, which uploads directly to the shared Phoenix service
+without creating an ACP thread or requiring another prop.
+
+Successful uploads return an exact URL and a per-app latest URL:
+
+```sh
+curl 'https://magicedit.dev/api/v1/captures/latest?appId=YOUR_BUNDLE_ID' | jq .
+```
+
+See [the capture API runbook](docs/magic-edit-capture-api.md) for B2 paths,
+health, deployment, and rollback details.

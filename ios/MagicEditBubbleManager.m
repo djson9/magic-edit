@@ -16,6 +16,9 @@ RCT_EXPORT_VIEW_PROPERTY(onNativeDragEnd, RCTDirectEventBlock)
 
 @interface RCT_EXTERN_MODULE(MagicEditSelectorModule, NSObject)
 
+RCT_EXTERN_METHOD(appMetadata:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+
 RCT_EXTERN_METHOD(select:(NSArray *)targetThreads
                   selectedThreadId:(NSString *)selectedThreadId
                   linkTarget:(NSString *)linkTarget

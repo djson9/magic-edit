@@ -1,0 +1,99 @@
+name: Deploy Capture API
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - capture_server/**
+      - bin/magic-edit-capture-deploy
+      - host/magic-edit-capture.service
+      - host/magic-edit-capture.sudoers
+      - host/magicedit.dev.caddy
+      - script/install-capture-host
+      - .github/workflows/deploy-capture-api.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: magic-edit-capture-api-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, linux, x64, magic-edit-infrastructure]
+    timeout-minutes: 20
+    environment:
+      name: magic-edit-infrastructure
+      url: https://magicedit.dev/up
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: "1.18.4"
+          otp-version: "27.3.4"
+
+      - name: Build and test Phoenix release
+        working-directory: capture_server
+        env:
+          MIX_ENV: prod
+          SECRET_KEY_BASE: magic-edit-build-only-secret-key-base-000000000000000000000000000000000000
+        run: |
+          set -euo pipefail
+          test "$(elixir -e 'IO.write(System.version())' | cut -d. -f1-2)" = "1.18"
+          mix local.hex --force
+          mix local.rebar --force
+          mix deps.get --only prod
+          mix compile --warnings-as-errors
+          MIX_ENV=test mix deps.get
+          MIX_ENV=test mix test
+          mix release --overwrite
+          artifact="$RUNNER_TEMP/magic-edit-capture-$GITHUB_SHA.tar.gz"
+          tar -C _build/prod/rel/magic_edit_capture -czf "$artifact" .
+          echo "MAGIC_EDIT_CAPTURE_ARTIFACT=$artifact" >>"$GITHUB_ENV"
+
+      - name: Deploy exact revision
+        run: |
+          set -euo pipefail
+          test "$(sudo /usr/local/sbin/magic-edit-capture-deploy --version)" = "0.5.0"
+          cmp -s bin/magic-edit-capture-deploy /usr/local/sbin/magic-edit-capture-deploy
+          sudo /usr/local/sbin/magic-edit-capture-deploy deploy \
+            "$MAGIC_EDIT_CAPTURE_ARTIFACT" "$GITHUB_SHA"
+
+      - name: Verify public capture round trip
+        run: |
+          set -euo pipefail
+          health="$(curl --fail --silent --show-error --max-time 10 https://magicedit.dev/up)"
+          test "$(jq -r '.ok' <<<"$health")" = true
+          test "$(jq -r '.revision' <<<"$health")" = "$GITHUB_SHA"
+          smoke="$RUNNER_TEMP/magic-edit-capture-smoke-$GITHUB_SHA.json"
+          jq -n --arg revision "$GITHUB_SHA" \
+            '{schemaVersion:1,app:{id:"magic-edit-deploy-smoke"},deployment:{revision:$revision}}' >"$smoke"
+          receipt="$(curl --fail --silent --show-error --max-time 30 \
+            -H 'Content-Type: application/json' \
+            -H 'X-Magic-Edit-App-Id: magic-edit-deploy-smoke' \
+            -H 'X-Magic-Edit-Schema-Version: 1' \
+            --data-binary @"$smoke" \
+            https://magicedit.dev/api/v1/captures)"
+          capture_id="$(jq -er '.captureId' <<<"$receipt")"
+          capture_url="$(jq -er '.captureUrl' <<<"$receipt")"
+          latest_url="$(jq -er '.latestUrl' <<<"$receipt")"
+          curl --fail --silent --show-error --max-time 30 "$capture_url" | cmp -s - "$smoke"
+          curl --fail --silent --show-error --max-time 30 "$latest_url" | cmp -s - "$smoke"
+          sudo /usr/local/sbin/magic-edit-capture-deploy delete-smoke "$capture_id"
+
+      - name: Record deployment
+        run: |
+          {
+            echo '### Magic Edit capture API'
+            echo
+            echo "- Revision: \`$GITHUB_SHA\`"
+            echo '- Health: https://magicedit.dev/up'
+            echo '- Storage: `/mnt/b2/magic-edit/captures`'
+            echo '- Smoke upload/read: passed and cleaned up'
+          } >>"$GITHUB_STEP_SUMMARY"
