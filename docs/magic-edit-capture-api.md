@@ -21,7 +21,7 @@ first version.
 
 Pushes to `djson9/magic-edit` `main` deploy only when `capture_server/**` or the
 named capture deployment files change. The existing
-`magic-edit-infrastructure` runner builds with the host's Elixir 1.14/OTP 25,
+`magic-edit-infrastructure` runner installs the internal Elixir 1.18/OTP 27 toolchain,
 runs ExUnit, creates a release, calls the root-owned deployer, verifies the
 public health revision, and completes a B2 write/read smoke test.
 

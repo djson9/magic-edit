@@ -33,6 +33,11 @@ jobs:
         with:
           persist-credentials: false
 
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: "1.18.4"
+          otp-version: "27.3.4"
+
       - name: Build and test Phoenix release
         working-directory: capture_server
         env:
@@ -40,7 +45,7 @@ jobs:
           SECRET_KEY_BASE: magic-edit-build-only-secret-key-base-000000000000000000000000000000000000
         run: |
           set -euo pipefail
-          test "$(elixir -e 'IO.write(System.version())' | cut -d. -f1-2)" = "1.14"
+          test "$(elixir -e 'IO.write(System.version())' | cut -d. -f1-2)" = "1.18"
           mix local.hex --force
           mix local.rebar --force
           mix deps.get --only prod

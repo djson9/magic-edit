@@ -5,7 +5,7 @@ defmodule MagicEditCapture.MixProject do
     [
       app: :magic_edit_capture,
       version: "0.1.0",
-      elixir: "~> 1.14",
+      elixir: "~> 1.17",
       elixirc_options: [warnings_as_errors: true],
       start_permanent: Mix.env() == :prod,
       deps: deps()
@@ -21,7 +21,7 @@ defmodule MagicEditCapture.MixProject do
 
   defp deps do
     [
-      {:phoenix, "== 1.7.24"},
+      {:phoenix, "== 1.8.13"},
       {:bandit, "== 1.12.5"},
       {:jason, "== 1.4.5"}
     ]
