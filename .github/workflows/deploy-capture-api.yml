@@ -24,6 +24,9 @@ jobs:
   deploy:
     runs-on: [self-hosted, linux, x64, magic-edit-infrastructure]
     timeout-minutes: 20
+    env:
+      # setup-beam normally receives this from GitHub-hosted runner images.
+      ImageOS: ubuntu24
     environment:
       name: magic-edit-infrastructure
       url: https://magicedit.dev/up
