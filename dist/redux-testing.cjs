@@ -42,7 +42,7 @@ function bytesFromView(value) {
   return Array.from(bytes);
 }
 function normalizeDiagnosticValue(value) {
-  const seen = /* @__PURE__ */ new WeakMap();
+  const ancestors = /* @__PURE__ */ new WeakMap();
   const visit = (candidate, path) => {
     if (candidate === null || typeof candidate === "string" || typeof candidate === "boolean") {
       return candidate;
@@ -57,72 +57,77 @@ function normalizeDiagnosticValue(value) {
       return tag("function", { name: candidate.name || "", source: String(candidate) });
     }
     if (typeof candidate !== "object") return tag(typeof candidate, { value: String(candidate) });
-    const previousPath = seen.get(candidate);
+    const previousPath = ancestors.get(candidate);
     if (previousPath) return tag("circular", { path: previousPath });
-    seen.set(candidate, path);
-    if (candidate instanceof Date) {
-      return tag("date", { value: Number.isNaN(candidate.getTime()) ? "Invalid Date" : candidate.toISOString() });
-    }
-    if (candidate instanceof Error) {
-      const normalized2 = {
-        name: candidate.name,
-        message: candidate.message,
-        stack: candidate.stack ?? null
-      };
+    ancestors.set(candidate, path);
+    try {
+      if (candidate instanceof Date) {
+        return tag("date", { value: Number.isNaN(candidate.getTime()) ? "Invalid Date" : candidate.toISOString() });
+      }
+      if (candidate instanceof Error) {
+        const normalized2 = {
+          name: candidate.name,
+          message: candidate.message,
+          stack: candidate.stack ?? null
+        };
+        for (const key of Object.keys(candidate)) {
+          try {
+            normalized2[key] = visit(candidate[key], `${path}.${key}`);
+          } catch (error) {
+            normalized2[key] = tag("property-error", { error: String(error) });
+          }
+        }
+        return tag("error", normalized2);
+      }
+      if (candidate instanceof Map) {
+        return tag("map", {
+          entries: Array.from(candidate.entries(), ([key, entry], index) => [
+            visit(key, `${path}.mapKey[${index}]`),
+            visit(entry, `${path}.mapValue[${index}]`)
+          ])
+        });
+      }
+      if (candidate instanceof Set) {
+        return tag("set", {
+          values: Array.from(candidate.values(), (entry, index) => visit(entry, `${path}.set[${index}]`))
+        });
+      }
+      if (candidate instanceof ArrayBuffer || ArrayBuffer.isView(candidate)) {
+        return tag(objectName(candidate), { bytes: bytesFromView(candidate) });
+      }
+      if (Array.isArray(candidate)) {
+        return candidate.map((entry, index) => visit(entry, `${path}[${index}]`));
+      }
+      const normalized = {};
+      const prototypeName = objectName(candidate);
+      if (prototypeName !== "Object") normalized.$magicEditPrototype = prototypeName;
       for (const key of Object.keys(candidate)) {
         try {
-          normalized2[key] = visit(candidate[key], `${path}.${key}`);
+          Object.defineProperty(normalized, key, {
+            configurable: true,
+            enumerable: true,
+            writable: true,
+            value: visit(candidate[key], `${path}.${key}`)
+          });
         } catch (error) {
-          normalized2[key] = tag("property-error", { error: String(error) });
+          Object.defineProperty(normalized, key, {
+            configurable: true,
+            enumerable: true,
+            writable: true,
+            value: tag("property-error", { error: String(error) })
+          });
         }
       }
-      return tag("error", normalized2);
+      return normalized;
+    } finally {
+      ancestors.delete(candidate);
     }
-    if (candidate instanceof Map) {
-      return tag("map", {
-        entries: Array.from(candidate.entries(), ([key, entry], index) => [
-          visit(key, `${path}.mapKey[${index}]`),
-          visit(entry, `${path}.mapValue[${index}]`)
-        ])
-      });
-    }
-    if (candidate instanceof Set) {
-      return tag("set", {
-        values: Array.from(candidate.values(), (entry, index) => visit(entry, `${path}.set[${index}]`))
-      });
-    }
-    if (candidate instanceof ArrayBuffer || ArrayBuffer.isView(candidate)) {
-      return tag(objectName(candidate), { bytes: bytesFromView(candidate) });
-    }
-    if (Array.isArray(candidate)) {
-      return candidate.map((entry, index) => visit(entry, `${path}[${index}]`));
-    }
-    const normalized = {};
-    const prototypeName = objectName(candidate);
-    if (prototypeName !== "Object") normalized.$magicEditPrototype = prototypeName;
-    for (const key of Object.keys(candidate)) {
-      try {
-        Object.defineProperty(normalized, key, {
-          configurable: true,
-          enumerable: true,
-          writable: true,
-          value: visit(candidate[key], `${path}.${key}`)
-        });
-      } catch (error) {
-        Object.defineProperty(normalized, key, {
-          configurable: true,
-          enumerable: true,
-          writable: true,
-          value: tag("property-error", { error: String(error) })
-        });
-      }
-    }
-    return normalized;
   };
   return visit(value, "$");
 }
 function utf8ByteLength(value) {
-  if (typeof TextEncoder !== "undefined") return new TextEncoder().encode(value).byteLength;
+  const Encoder = globalThis.TextEncoder;
+  if (Encoder) return new Encoder().encode(value).byteLength;
   let bytes = 0;
   for (let index = 0; index < value.length; index += 1) {
     const code = value.charCodeAt(index);
@@ -235,13 +240,14 @@ function installNetworkRecorder(runtime) {
   if (typeof root.fetch === "function") {
     const originalFetch = root.fetch;
     installation.fetch = originalFetch;
-    root.fetch = function magicEditFetch(input, init) {
+    root.fetch = function magicEditFetch(...args) {
+      const [input, init] = args;
       const details = requestDetails(input, init);
-      if (internalUpload(details.requestHeaders)) return originalFetch.apply(this, [input, init]);
+      if (internalUpload(details.requestHeaders)) return originalFetch.apply(this, args);
       const sequence = runtime.beginNetwork({ transport: "fetch", ...details });
       let request;
       try {
-        request = originalFetch.apply(this, [input, init]);
+        request = originalFetch.apply(this, args);
       } catch (error) {
         runtime.completeNetwork(sequence, { outcome: errorOutcome(error), error });
         throw error;
@@ -349,7 +355,10 @@ function restoreNetworkRecorderForTests() {
 // src/diagnostics/runtime.ts
 var DEFAULT_CLOCK = {
   now: () => Date.now(),
-  monotonicNow: () => typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now()
+  monotonicNow: () => {
+    const candidate = globalThis.performance;
+    return typeof candidate?.now === "function" ? candidate.now() : Date.now();
+  }
 };
 var GLOBAL_KEY = Symbol.for("@djson9/magic-edit/diagnostics/v1");
 function iso(milliseconds) {
@@ -391,8 +400,14 @@ function actionStormCount(transitions) {
   let start = 0;
   let insideStorm = false;
   for (let end = 0; end < transitions.length; end += 1) {
-    const endAt = Number(transitions[end].wallTimeMs);
-    while (start < end && endAt - Number(transitions[start].wallTimeMs) > 1e3) start += 1;
+    const endTransition = transitions[end];
+    if (!endTransition) continue;
+    const endAt = Number(endTransition.wallTimeMs);
+    while (start < end) {
+      const startTransition = transitions[start];
+      if (!startTransition || endAt - Number(startTransition.wallTimeMs) <= 1e3) break;
+      start += 1;
+    }
     const isStorm = end - start + 1 >= 20;
     if (isStorm && !insideStorm) storms += 1;
     insideStorm = isStorm;
@@ -413,10 +428,13 @@ var MagicEditDiagnosticRuntime = class {
   runtimeEvents = [];
   recorderErrors = [];
   listeners = /* @__PURE__ */ new Set();
-  appMetadata = {
-    id: typeof location !== "undefined" && location.host ? location.host : "unknown-app",
-    platform: typeof navigator !== "undefined" ? navigator.platform || "unknown" : "unknown"
-  };
+  appMetadata = (() => {
+    const environment = globalThis;
+    return {
+      id: environment.location?.host || "unknown-app",
+      platform: environment.navigator?.platform || "unknown"
+    };
+  })();
   networkInstalled = false;
   stallTimer = null;
   setClockForTests(clock) {
@@ -675,6 +693,7 @@ var MagicEditDiagnosticRuntime = class {
     const url = details.url;
     for (let index = this.networkRequests.length - 1; index >= 0; index -= 1) {
       const previous = this.networkRequests[index];
+      if (!previous) continue;
       if (previous.method !== method || previous.url !== url) continue;
       const outcome = previous.outcome;
       const status = Number(previous.status);

@@ -131,6 +131,23 @@ describe('zero-configuration Redux diagnostics', () => {
     })
   })
 
+  it('copies shared references completely while tagging only ancestor cycles', () => {
+    const shared = { retained: true }
+    const value = { first: shared, second: shared }
+    value.self = value
+    const timing = clockFixture()
+    setMagicEditDiagnosticClock(timing.clock)
+    const store = createStore(() => value, applyMiddleware(magicEditMiddleware))
+
+    store.dispatch({ type: 'shared/capture' })
+
+    expect(getMagicEditDiagnosticSnapshot().redux.stores[0].currentState).toEqual({
+      first: { retained: true },
+      second: { retained: true },
+      self: { $magicEditType: 'circular', path: '$' },
+    })
+  })
+
   it('does not truncate action history and detects an action storm', () => {
     const timing = clockFixture()
     setMagicEditDiagnosticClock(timing.clock)

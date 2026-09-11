@@ -26,6 +26,11 @@ function receipt(value: unknown): MagicEditCaptureReceipt {
   return candidate as MagicEditCaptureReceipt
 }
 
+function monotonicNow() {
+  const candidate = (globalThis as { performance?: { now?: () => number } }).performance
+  return typeof candidate?.now === 'function' ? candidate.now() : Date.now()
+}
+
 export async function uploadMagicEditCapture(fetcher: typeof fetch = fetch) {
   const runtime = diagnosticRuntime()
   runtime.recordRuntimeEvent('capture_upload_started')
@@ -34,9 +39,7 @@ export async function uploadMagicEditCapture(fetcher: typeof fetch = fetch) {
   const appId = typeof snapshot.app.id === 'string' && snapshot.app.id.trim()
     ? snapshot.app.id.trim()
     : 'unknown-app'
-  const started = typeof performance !== 'undefined' && typeof performance.now === 'function'
-    ? performance.now()
-    : Date.now()
+  const started = monotonicNow()
   try {
     const response = await fetcher(MAGIC_EDIT_CAPTURE_ENDPOINT, {
       method: 'POST',
@@ -59,18 +62,14 @@ export async function uploadMagicEditCapture(fetcher: typeof fetch = fetch) {
     runtime.recordRuntimeEvent('capture_upload_succeeded', {
       captureId: result.captureId,
       byteSize: utf8ByteLength(body),
-      durationMs: (typeof performance !== 'undefined' && typeof performance.now === 'function'
-        ? performance.now()
-        : Date.now()) - started,
+      durationMs: monotonicNow() - started,
     })
     return result
   } catch (error) {
     runtime.recordRuntimeEvent('capture_upload_failed', {
       error,
       byteSize: utf8ByteLength(body),
-      durationMs: (typeof performance !== 'undefined' && typeof performance.now === 'function'
-        ? performance.now()
-        : Date.now()) - started,
+      durationMs: monotonicNow() - started,
     })
     throw error
   }

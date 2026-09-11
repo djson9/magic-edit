@@ -1,6 +1,6 @@
 {
   "name": "@djson9/magic-edit",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Shared web and React Native element selector for contextual ACP Web feedback.",
   "type": "module",
   "main": "./dist/magic-edit.js",
@@ -16,17 +16,17 @@
     ".": "./dist/magic-edit.js",
     "./magic-edit.js": "./dist/magic-edit.js",
     "./react-native": {
-      "types": "./react-native/index.tsx",
+      "types": "./react-native/index.d.ts",
       "react-native": "./dist/react-native.cjs",
       "default": "./dist/react-native.cjs"
     },
     "./redux": {
-      "types": "./redux/index.ts",
+      "types": "./redux/index.d.ts",
       "react-native": "./dist/redux.cjs",
       "default": "./dist/redux.cjs"
     },
     "./redux/testing": {
-      "types": "./redux/testing.ts",
+      "types": "./redux/testing.d.ts",
       "react-native": "./dist/redux-testing.cjs",
       "default": "./dist/redux-testing.cjs"
     }
