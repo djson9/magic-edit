@@ -12,16 +12,20 @@
     ".apple-signing-tools-version",
     "script/apple-signing-lane",
     "ios/LocalDictationKit/*",
-    "native/ios/*",
     "native/package.json",
     "native/package-lock.json",
     "native/Gemfile",
     "native/app.json",
+    "native/cng-patches/*",
+    "native/patches/*",
+    "native/plugins/*",
     "native/react-native.config.js",
     "native/scripts/build-live-ota.sh",
     "native/scripts/ci-release-live-ota.sh",
+    "native/scripts/ios/*",
     "native/scripts/live-signing.json",
-    "native/scripts/make-live-ota-package.sh"
+    "native/scripts/make-live-ota-package.sh",
+    "native/scripts/patchExpoModulesCore.mjs"
   ],
   "hotReloadPaths": [
     "native/App.tsx",
