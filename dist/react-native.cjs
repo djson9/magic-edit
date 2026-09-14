@@ -364,7 +364,101 @@ function restoreNetworkRecorderForTests() {
   delete root[INSTALLATION_KEY];
 }
 
+// src/diagnostics/state-changes.ts
+function traversable(value) {
+  if (!value || typeof value !== "object") return false;
+  if (Array.isArray(value)) return true;
+  try {
+    const prototype = Object.getPrototypeOf(value);
+    return prototype === Object.prototype || prototype === null;
+  } catch {
+    return false;
+  }
+}
+function sameContainer(left, right) {
+  return traversable(left) && traversable(right) && Array.isArray(left) === Array.isArray(right);
+}
+function diagnosticStateChanges(before, after, maximumChanges) {
+  const changes = [];
+  let truncated = false;
+  const ancestorPairs = /* @__PURE__ */ new WeakMap();
+  const append = (change) => {
+    if (changes.length >= maximumChanges) {
+      truncated = true;
+      return false;
+    }
+    changes.push(change);
+    return true;
+  };
+  const compare = (left, right, path) => {
+    if (left === right || truncated) return;
+    if (!sameContainer(left, right)) {
+      append({ operation: "replace", path, value: normalizeDiagnosticValue(right) });
+      return;
+    }
+    const leftObject = left;
+    const rightObject = right;
+    const seenRights = ancestorPairs.get(leftObject) ?? /* @__PURE__ */ new WeakSet();
+    if (seenRights.has(rightObject)) {
+      append({ operation: "replace", path, value: normalizeDiagnosticValue(right) });
+      return;
+    }
+    seenRights.add(rightObject);
+    ancestorPairs.set(leftObject, seenRights);
+    const leftRecord = left;
+    const rightRecord = right;
+    try {
+      const leftKeys = Object.keys(leftRecord);
+      const rightKeys = Object.keys(rightRecord);
+      const rightKeySet = new Set(rightKeys);
+      for (const key of leftKeys) {
+        if (truncated) return;
+        if (!rightKeySet.has(key)) {
+          append({
+            operation: "remove",
+            path: [...path, Array.isArray(right) ? Number(key) : key]
+          });
+        }
+      }
+      const leftKeySet = new Set(leftKeys);
+      for (const key of rightKeys) {
+        if (truncated) return;
+        const segment = Array.isArray(right) ? Number(key) : key;
+        let rightValue;
+        try {
+          rightValue = rightRecord[key];
+        } catch (error) {
+          append({ operation: "replace", path: [...path, segment], value: normalizeDiagnosticValue(error) });
+          continue;
+        }
+        if (!leftKeySet.has(key)) {
+          append({ operation: "add", path: [...path, segment], value: normalizeDiagnosticValue(rightValue) });
+          continue;
+        }
+        let leftValue;
+        try {
+          leftValue = leftRecord[key];
+        } catch {
+          append({ operation: "replace", path: [...path, segment], value: normalizeDiagnosticValue(rightValue) });
+          continue;
+        }
+        compare(leftValue, rightValue, [...path, segment]);
+      }
+    } finally {
+      seenRights.delete(rightObject);
+    }
+  };
+  compare(before, after, []);
+  return { changes, truncated };
+}
+
 // src/diagnostics/runtime.ts
+var DEFAULT_MAXIMUM_STATE_CHANGES = 256;
+var DEFAULT_MAXIMUM_TRANSITIONS = 200;
+var MAXIMUM_NETWORK_REQUESTS = 200;
+var MAXIMUM_RUNTIME_EVENTS = 200;
+var MAXIMUM_RECORDER_ERRORS = 50;
+var MAXIMUM_SETTLED_OPERATIONS = 200;
 var DEFAULT_CLOCK = {
   now: () => Date.now(),
   monotonicNow: () => {
@@ -426,6 +520,15 @@ function actionStormCount(transitions) {
   }
   return storms;
 }
+function positiveInteger(value, fallback) {
+  return Number.isSafeInteger(value) && Number(value) > 0 ? Number(value) : fallback;
+}
+function appendBounded(values, value, maximum) {
+  values.push(value);
+  const dropped = Math.max(0, values.length - maximum);
+  if (dropped > 0) values.splice(0, dropped);
+  return dropped;
+}
 var MagicEditDiagnosticRuntime = class {
   clock = DEFAULT_CLOCK;
   nextStoreNumber = 1;
@@ -439,6 +542,10 @@ var MagicEditDiagnosticRuntime = class {
   activeNetwork = /* @__PURE__ */ new Map();
   runtimeEvents = [];
   recorderErrors = [];
+  droppedNetworkRequests = 0;
+  droppedRuntimeEvents = 0;
+  droppedRecorderErrors = 0;
+  droppedSettledOperations = 0;
   listeners = /* @__PURE__ */ new Set();
   appMetadata = (() => {
     const environment = globalThis;
@@ -455,14 +562,24 @@ var MagicEditDiagnosticRuntime = class {
   time() {
     return { now: this.clock.now(), monotonicNow: this.clock.monotonicNow() };
   }
-  attachStore(store, initialState) {
+  attachStore(store, initialState, options = {}) {
     const existing = this.stores.get(store);
     if (existing) return existing.storeId;
     const state = {
       storeId: `store-${this.nextStoreNumber++}`,
       lastActionAt: null,
-      currentState: normalizeDiagnosticValue(initialState),
-      transitions: []
+      currentState: initialState,
+      transitions: [],
+      includeStateSnapshots: options.includeStateSnapshots === true,
+      maximumStateChanges: positiveInteger(
+        options.maximumStateChanges,
+        DEFAULT_MAXIMUM_STATE_CHANGES
+      ),
+      maximumTransitions: positiveInteger(
+        options.maximumTransitions,
+        DEFAULT_MAXIMUM_TRANSITIONS
+      ),
+      droppedTransitions: 0
     };
     this.stores.set(store, state);
     this.storeStates.set(state.storeId, state);
@@ -490,12 +607,22 @@ var MagicEditDiagnosticRuntime = class {
   currentReduxSequence() {
     return this.globalSequence;
   }
-  recordAction(storeId, action, before, after, startedAt, startedMonotonicAtMs, completedMonotonicAtMs, didThrow, thrown) {
+  updateStoreState(storeId, currentState) {
+    const store = this.storeStates.get(storeId);
+    if (store) store.currentState = currentState;
+  }
+  recordAction(storeId, action, recordedAction, before, after, startedAt, startedMonotonicAtMs, completedMonotonicAtMs, didThrow, thrown) {
     const store = this.storeStates.get(storeId);
     if (!store) return;
     try {
       const sequence = ++this.globalSequence;
       const changedSlices = topLevelChanges(before, after);
+      const stateChanges = diagnosticStateChanges(
+        before,
+        after,
+        store.maximumStateChanges
+      );
+      const noOp = stateChanges.changes.length === 0 && !stateChanges.truncated;
       const transition = {
         sequence,
         storeId,
@@ -506,14 +633,21 @@ var MagicEditDiagnosticRuntime = class {
         dispatchDurationMs: Math.max(0, completedMonotonicAtMs - startedMonotonicAtMs),
         sincePreviousActionMs: store.lastActionAt === null ? null : Math.max(0, startedAt - store.lastActionAt),
         changedSlices,
-        noOp: before === after,
-        action: normalizeDiagnosticValue(action),
-        resultingState: normalizeDiagnosticValue(after),
+        noOp,
+        action: normalizeDiagnosticValue(recordedAction),
+        stateChanges: stateChanges.changes,
+        stateChangesTruncated: stateChanges.truncated,
+        ...!noOp && store.includeStateSnapshots ? { resultingState: normalizeDiagnosticValue(after) } : {},
         ...didThrow ? { threw: normalizeDiagnosticValue(thrown) } : {}
       };
       store.lastActionAt = startedAt;
-      store.currentState = transition.resultingState;
+      store.currentState = after;
       store.transitions.push(transition);
+      if (store.transitions.length > store.maximumTransitions) {
+        const dropCount = store.transitions.length - store.maximumTransitions;
+        store.transitions.splice(0, dropCount);
+        store.droppedTransitions += dropCount;
+      }
       this.correlateOperation(storeId, action, transition);
     } catch (error) {
       this.recordError("redux_record_failed", error);
@@ -530,13 +664,13 @@ var MagicEditDiagnosticRuntime = class {
   recordRuntimeEvent(type, details = {}) {
     try {
       const now = this.clock.now();
-      this.runtimeEvents.push({
+      this.droppedRuntimeEvents += appendBounded(this.runtimeEvents, {
         type,
         at: iso(now),
         wallTimeMs: now,
         monotonicAtMs: this.clock.monotonicNow(),
         details: normalizeDiagnosticValue(details)
-      });
+      }, MAXIMUM_RUNTIME_EVENTS);
     } catch (error) {
       this.recordError("runtime_event_failed", error);
     }
@@ -561,7 +695,11 @@ var MagicEditDiagnosticRuntime = class {
       retryOfSequence: this.retryCandidate(details)
     };
     this.activeNetwork.set(sequence, record);
-    this.networkRequests.push(record);
+    this.droppedNetworkRequests += appendBounded(
+      this.networkRequests,
+      record,
+      MAXIMUM_NETWORK_REQUESTS
+    );
     return sequence;
   }
   completeNetwork(sequence, details) {
@@ -579,20 +717,21 @@ var MagicEditDiagnosticRuntime = class {
   }
   recordError(code, error) {
     const now = this.clock.now();
-    this.recorderErrors.push({
+    this.droppedRecorderErrors += appendBounded(this.recorderErrors, {
       code,
       at: iso(now),
       wallTimeMs: now,
       error: normalizeDiagnosticValue(error)
-    });
+    }, MAXIMUM_RECORDER_ERRORS);
   }
   snapshot() {
     const now = this.clock.now();
     const monotonic = this.clock.monotonicNow();
     const stores = Array.from(this.storeStates.values(), (store) => ({
       storeId: store.storeId,
-      currentState: store.currentState,
-      transitions: store.transitions
+      currentState: normalizeDiagnosticValue(store.currentState),
+      transitions: store.transitions,
+      droppedTransitions: store.droppedTransitions
     }));
     const transitions = stores.flatMap((store) => store.transitions);
     transitions.sort((left, right) => Number(left.sequence) - Number(right.sequence));
@@ -625,7 +764,9 @@ var MagicEditDiagnosticRuntime = class {
       runtimeEvents: this.runtimeEvents,
       recorderErrors: this.recorderErrors,
       summary: {
-        actions: transitions.length,
+        actions: this.globalSequence,
+        retainedActions: transitions.length,
+        droppedActions: stores.reduce((total, store) => total + store.droppedTransitions, 0),
         stores: stores.length,
         slowDispatches: transitions.filter((entry) => Number(entry.dispatchDurationMs) > 16).length,
         noOpActions: transitions.filter((entry) => entry.noOp === true).length,
@@ -635,12 +776,16 @@ var MagicEditDiagnosticRuntime = class {
         mostChangedSlice,
         largestInterActionGapMs: gaps.length ? Math.max(...gaps) : null,
         networkRequests: this.networkRequests.length,
+        droppedNetworkRequests: this.droppedNetworkRequests,
         inFlightRequests: this.activeNetwork.size,
         peakNetworkConcurrency: this.networkRequests.reduce(
           (peak, request) => Math.max(peak, Number(request.concurrencyAtStart) || 0),
           0
         ),
-        recorderErrors: this.recorderErrors.length
+        recorderErrors: this.recorderErrors.length,
+        droppedRuntimeEvents: this.droppedRuntimeEvents,
+        droppedRecorderErrors: this.droppedRecorderErrors,
+        droppedSettledOperations: this.droppedSettledOperations
       }
     };
   }
@@ -659,6 +804,10 @@ var MagicEditDiagnosticRuntime = class {
     this.activeNetwork = /* @__PURE__ */ new Map();
     this.runtimeEvents = [];
     this.recorderErrors = [];
+    this.droppedNetworkRequests = 0;
+    this.droppedRuntimeEvents = 0;
+    this.droppedRecorderErrors = 0;
+    this.droppedSettledOperations = 0;
     this.appMetadata = { id: "unknown-app", platform: "unknown" };
     this.networkInstalled = false;
     restoreNetworkRecorderForTests();
@@ -683,7 +832,7 @@ var MagicEditDiagnosticRuntime = class {
     const pending = this.pendingOperations.get(key);
     const startedAt = pending?.startedAt ?? Number(transition.wallTimeMs);
     const startedMonotonicAtMs = pending?.startedMonotonicAtMs ?? Number(transition.monotonicAtMs);
-    this.settledOperations.push({
+    this.droppedSettledOperations += appendBounded(this.settledOperations, {
       storeId,
       requestId: details.requestId,
       operation: pending?.operation ?? details.operation,
@@ -697,7 +846,7 @@ var MagicEditDiagnosticRuntime = class {
       conditionRejected: details.condition,
       pendingAction: pending?.action ?? null,
       settledAction: transition.action
-    });
+    }, MAXIMUM_SETTLED_OPERATIONS);
     this.pendingOperations.delete(key);
   }
   retryCandidate(details) {
@@ -757,9 +906,20 @@ function monotonicNow() {
 }
 async function uploadMagicEditCapture(fetcher = fetch) {
   const runtime = diagnosticRuntime();
+  const totalStarted = monotonicNow();
   runtime.recordRuntimeEvent("capture_upload_started");
+  const snapshotStarted = monotonicNow();
   const snapshot = runtime.snapshot();
+  const snapshotDurationMs = monotonicNow() - snapshotStarted;
+  const serializationStarted = monotonicNow();
   const body = JSON.stringify(snapshot);
+  const serializationDurationMs = monotonicNow() - serializationStarted;
+  const bodyByteSize = utf8ByteLength(body);
+  runtime.recordRuntimeEvent("capture_prepared", {
+    byteSize: bodyByteSize,
+    serializationDurationMs,
+    snapshotDurationMs
+  });
   const appId = typeof snapshot.app.id === "string" && snapshot.app.id.trim() ? snapshot.app.id.trim() : "unknown-app";
   const started = monotonicNow();
   try {
@@ -779,16 +939,25 @@ async function uploadMagicEditCapture(fetcher = fetch) {
       throw new Error(`Magic Edit capture failed: ${code}`);
     }
     const result = receipt(payload);
+    const uploadDurationMs = monotonicNow() - started;
     runtime.recordRuntimeEvent("capture_upload_succeeded", {
       captureId: result.captureId,
-      byteSize: utf8ByteLength(body),
-      durationMs: monotonicNow() - started
+      byteSize: bodyByteSize,
+      durationMs: uploadDurationMs
     });
-    return result;
+    return {
+      ...result,
+      clientTiming: {
+        snapshotDurationMs,
+        serializationDurationMs,
+        uploadDurationMs,
+        totalDurationMs: monotonicNow() - totalStarted
+      }
+    };
   } catch (error) {
     runtime.recordRuntimeEvent("capture_upload_failed", {
       error,
-      byteSize: utf8ByteLength(body),
+      byteSize: bodyByteSize,
       durationMs: monotonicNow() - started
     });
     throw error;
@@ -1127,6 +1296,7 @@ function MagicEditBubble({
       import_react_native.Alert.alert(
         "Magic Edit capture saved",
         `Capture ${capture.captureId}
+${(capture.byteSize / 1024).toFixed(1)} KB in ${(capture.clientTiming.totalDurationMs / 1e3).toFixed(1)}s
 ${capture.captureUrl}`
       );
     } catch (error) {

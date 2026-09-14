@@ -8,13 +8,20 @@ export type MagicEditDiagnosticTransition = Record<string, unknown> & {
   storeId: string
   type: string
   action: unknown
-  resultingState: unknown
+  resultingState?: unknown
+  stateChanges: Array<{
+    operation: 'add' | 'remove' | 'replace'
+    path: Array<string | number>
+    value?: unknown
+  }>
+  stateChangesTruncated: boolean
 }
 
 export type MagicEditDiagnosticStore = {
   storeId: string
   currentState: unknown
   transitions: MagicEditDiagnosticTransition[]
+  droppedTransitions: number
 }
 
 export type MagicEditDiagnosticSnapshot = {

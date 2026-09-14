@@ -252,7 +252,10 @@ Add the shared middleware to every Redux store that should appear in a Magic
 Edit capture:
 
 ```ts
-import { magicEditMiddleware } from '@djson9/magic-edit/redux'
+import {
+  createMagicEditMiddleware,
+  magicEditMiddleware,
+} from '@djson9/magic-edit/redux'
 
 const store = configureStore({
   reducer,
@@ -261,13 +264,38 @@ const store = configureStore({
 })
 ```
 
-There is no diagnostics initializer, config object, selector, callback, logging
-API, telemetry API, console interception, or network setup. The middleware
-records every action and resulting state for the process lifetime, derives
-Redux Toolkit async-operation and dispatch timing, and installs idempotent
-`fetch` plus `XMLHttpRequest` observation. Version 0.5.0 intentionally applies
-no redaction, truncation, history limit, or artifact-size cap; request and
-response bodies are excluded because observing them can alter stream behavior.
+The zero-configuration middleware retains the latest complete state plus the
+last 200 actions and their structural state changes. Unchanged branches are
+never copied into each transition, and unusually broad changes are capped at
+256 paths. Network and runtime histories are bounded independently. This keeps
+repeated full-state serialization off the dispatch hot path while retaining
+exact action ordering, Redux Toolkit async-operation correlation, dispatch
+timing, and idempotent `fetch` plus `XMLHttpRequest` observation.
+
+Apps with large stores should select a small diagnostic projection and omit
+their own derived diagnostics action, while preserving the same capture
+schema:
+
+```ts
+const diagnosticsMiddleware = createMagicEditMiddleware({
+  includeStateSnapshots: true,
+  selectAction: action => ({ type: action.type, requestId: action.meta?.requestId }),
+  selectState: state => state.diagnosticsProjection,
+  shouldRecordAction: action => action.type !== 'diagnostics/actionRecorded',
+})
+```
+
+`includeStateSnapshots` retains the complete selected projection on changed
+transitions in addition to its structural changes; leave it off when the
+selector is the full application state.
+
+`selectAction` is useful when server snapshot actions contain large entity
+payloads; retain the action type and only the correlation fields needed for
+diagnosis. The recorder does not otherwise redact action or projected-state
+values. Request and response bodies remain excluded because observing them can
+alter stream behavior. Successful save alerts include the final byte size and
+end-to-end client duration; `capture_prepared` runtime events expose snapshot and
+serialization timing to the next capture.
 
 The existing React Native `MagicEditBubble` discovers the same process-wide
 singleton automatically. When a store is attached, tapping the bubble offers

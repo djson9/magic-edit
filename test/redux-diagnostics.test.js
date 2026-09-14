@@ -1,6 +1,6 @@
 import { applyMiddleware, createStore } from 'redux'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { magicEditMiddleware } from '../dist/redux.cjs'
+import { createMagicEditMiddleware, magicEditMiddleware } from '../dist/redux.cjs'
 import {
   getMagicEditDiagnosticSnapshot,
   registerMagicEditAppMetadata,
@@ -36,7 +36,7 @@ function reducer(timing) {
 describe('zero-configuration Redux diagnostics', () => {
   beforeEach(() => resetMagicEditDiagnostics())
 
-  it('captures complete actions, resulting state, ordering, timings, no-ops, and all attached stores', () => {
+  it('captures complete actions, state changes, ordering, timings, no-ops, and all attached stores', () => {
     const timing = clockFixture()
     setMagicEditDiagnosticClock(timing.clock)
     registerMagicEditAppMetadata({ id: 'fixture.money.live', build: '42' })
@@ -58,12 +58,14 @@ describe('zero-configuration Redux diagnostics', () => {
       changedSlices: ['count'],
       noOp: false,
       action: { type: 'counter/increment', payload: 2, meta: { source: 'fixture' } },
-      resultingState: { count: 2, nested: { ready: false } },
+      stateChanges: [{ operation: 'replace', path: ['count'], value: 2 }],
+      stateChangesTruncated: false,
     })
     expect(snapshot.redux.stores[0].transitions[1]).toMatchObject({
       sequence: 2,
       sincePreviousActionMs: 87,
       noOp: true,
+      stateChanges: [],
     })
     expect(snapshot.redux.stores[1].transitions[0]).toMatchObject({
       sequence: 3,
@@ -148,7 +150,7 @@ describe('zero-configuration Redux diagnostics', () => {
     })
   })
 
-  it('does not truncate action history and detects an action storm', () => {
+  it('retains bounded action history, reports dropped actions, and detects an action storm', () => {
     const timing = clockFixture()
     setMagicEditDiagnosticClock(timing.clock)
     const store = createStore(reducer(timing), applyMiddleware(magicEditMiddleware))
@@ -157,8 +159,90 @@ describe('zero-configuration Redux diagnostics', () => {
       timing.advance({ wallMs: 2, monotonicMs: 2 })
     }
     const snapshot = getMagicEditDiagnosticSnapshot()
-    expect(snapshot.redux.stores[0].transitions).toHaveLength(300)
+    expect(snapshot.redux.stores[0].transitions).toHaveLength(200)
+    expect(snapshot.redux.stores[0].transitions[0].sequence).toBe(101)
+    expect(snapshot.redux.stores[0].droppedTransitions).toBe(100)
     expect(snapshot.redux.stores[0].currentState.count).toBe(300)
     expect(snapshot.summary.actionStorms).toBe(1)
+    expect(snapshot.summary).toMatchObject({
+      actions: 300,
+      retainedActions: 200,
+      droppedActions: 100,
+    })
+  })
+
+  it('records a selected state projection and filters derived diagnostic actions', () => {
+    const timing = clockFixture()
+    setMagicEditDiagnosticClock(timing.clock)
+    const middleware = createMagicEditMiddleware({
+      includeStateSnapshots: true,
+      maximumTransitions: 2,
+      selectAction: action => ({ type: action.type }),
+      selectState: state => ({ phase: state.phase, active: state.interaction.active }),
+      shouldRecordAction: action => action.type !== 'diagnostics/actionRecorded',
+    })
+    const store = createStore((state = {
+      phase: 'idle',
+      interaction: { active: false },
+      entities: { hidden: { large: 'value' } },
+    }, action) => {
+      if (action.type === 'press') return { ...state, phase: 'pressing' }
+      if (action.type === 'activate') return {
+        ...state,
+        interaction: { active: true },
+      }
+      if (action.type === 'diagnostics/actionRecorded') return {
+        ...state,
+        entities: { hidden: { large: 'new-value' } },
+      }
+      return state
+    }, applyMiddleware(middleware))
+
+    store.dispatch({ type: 'press' })
+    store.dispatch({ type: 'diagnostics/actionRecorded' })
+    store.dispatch({ type: 'activate' })
+
+    const snapshot = getMagicEditDiagnosticSnapshot()
+    expect(snapshot.redux.stores[0]).toMatchObject({
+      currentState: { phase: 'pressing', active: true },
+      droppedTransitions: 0,
+    })
+    expect(snapshot.redux.stores[0].transitions.map(transition => transition.type)).toEqual([
+      'press',
+      'activate',
+    ])
+    expect(snapshot.redux.stores[0].transitions.map(transition => transition.action)).toEqual([
+      { type: 'press' },
+      { type: 'activate' },
+    ])
+    expect(snapshot.redux.stores[0].transitions[1].stateChanges).toEqual([
+      { operation: 'replace', path: ['active'], value: true },
+    ])
+    expect(snapshot.redux.stores[0].transitions[1].resultingState).toEqual({
+      phase: 'pressing',
+      active: true,
+    })
+    expect(JSON.stringify(snapshot)).not.toContain('new-value')
+  })
+
+  it('caps unusually broad state changes without losing the latest complete state', () => {
+    const timing = clockFixture()
+    setMagicEditDiagnosticClock(timing.clock)
+    const middleware = createMagicEditMiddleware({ maximumStateChanges: 2 })
+    const store = createStore((state = {}, action) =>
+      action.type === 'replace' ? { first: 1, second: 2, third: 3 } : state,
+    applyMiddleware(middleware))
+
+    store.dispatch({ type: 'replace' })
+
+    const snapshot = getMagicEditDiagnosticSnapshot()
+    expect(snapshot.redux.stores[0].currentState).toEqual({ first: 1, second: 2, third: 3 })
+    expect(snapshot.redux.stores[0].transitions[0]).toMatchObject({
+      stateChangesTruncated: true,
+      stateChanges: [
+        { operation: 'add', path: ['first'], value: 1 },
+        { operation: 'add', path: ['second'], value: 2 },
+      ],
+    })
   })
 })
