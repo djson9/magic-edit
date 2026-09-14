@@ -113,14 +113,16 @@ if [ "$current_source_sha" != "$requested_sha" ]; then
 fi
 repo_git cat-file -e "$requested_sha^{commit}"
 
-# Push through the local bare receiver as its restricted git account. The
-# receiver keeps its advertised deployment ref and GitHub's mirrored ref in
-# sync, and applies the existing exact lease before either ref advances.
-sudo -u git -H git \
-  -c safe.directory="$repo_path" \
+# Push through the local bare receiver after all root-owned registration checks
+# pass. The source checkout is intentionally unreadable by the public git
+# account. Restore receiver object/ref ownership after receive-pack completes so
+# later SSH pushes remain unprivileged. The receiver applies the existing exact
+# lease before either its advertised ref or GitHub's mirrored ref advances.
+git -c safe.directory="$repo_path" \
   -C "$repo_path" \
   push --porcelain --force "$bare_repo" \
   "$requested_sha:refs/heads/$deploy_branch"
+chown -R git:git "$bare_repo/objects" "$bare_repo/refs"
 
 promoted_sha="$(git -c safe.directory="$bare_repo" --git-dir="$bare_repo" \
   rev-parse --verify "refs/heads/$deploy_branch")"

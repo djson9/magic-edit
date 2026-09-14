@@ -49,6 +49,7 @@ describe('Magic Edit automatic promotion', () => {
     const source = readFileSync('bin/magic-edit-promote', 'utf8')
     expect(source).toContain('push --porcelain --force "$bare_repo"')
     expect(source).not.toContain('push --porcelain --force-with-lease')
+    expect(source).toContain('chown -R git:git "$bare_repo/objects" "$bare_repo/refs"')
     expect(source).toContain('Skipping stale Magic Edit promotion')
   })
 })
