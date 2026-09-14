@@ -1,0 +1,113 @@
+#!/usr/bin/env bash
+# Scaffold immediate source-branch promotion for a registered Magic Edit app.
+set -euo pipefail
+
+version=0.5.4
+target=
+source_branch=staging
+runner_label=
+runner_user=
+action_ref="${MAGIC_EDIT_ACTION_REF:-v0.5.4}"
+output=.github/workflows/magic-edit-auto-promote.yml
+
+usage() {
+  cat <<'EOF'
+usage: magic-edit-setup-live --target TARGET --runner-label LABEL --runner-user USER [options]
+
+options:
+  --source-branch BRANCH  Branch to promote immediately (default: staging)
+  --runner-label LABEL    Existing self-hosted deployment runner label
+  --runner-user USER      Unprivileged account running that deployment runner
+  --action-ref REF        Immutable Magic Edit tag or commit (default: v0.5.4)
+  --check                 Verify the generated workflow without changing it
+  --version               Print the installer version
+EOF
+}
+
+check=0
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --target) target="${2:-}"; shift 2 ;;
+    --source-branch) source_branch="${2:-}"; shift 2 ;;
+    --runner-label) runner_label="${2:-}"; shift 2 ;;
+    --runner-user) runner_user="${2:-}"; shift 2 ;;
+    --action-ref) action_ref="${2:-}"; shift 2 ;;
+    --check) check=1; shift ;;
+    --version) printf '%s\n' "$version"; exit 0 ;;
+    -h|--help) usage; exit 0 ;;
+    *) usage >&2; exit 2 ;;
+  esac
+done
+
+[[ "$target" =~ ^[a-z0-9][a-z0-9-]*$ ]] || {
+  echo "--target must be a lowercase Magic Edit target" >&2
+  exit 2
+}
+git check-ref-format "refs/heads/$source_branch" >/dev/null || {
+  echo "--source-branch must be a valid branch name" >&2
+  exit 2
+}
+[[ "$runner_label" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || {
+  echo "--runner-label must be one GitHub runner label" >&2
+  exit 2
+}
+[[ "$runner_user" =~ ^[a-z_][a-z0-9_-]*$ ]] || {
+  echo "--runner-user must be the unprivileged deployment runner account" >&2
+  exit 2
+}
+[[ "$action_ref" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ || "$action_ref" =~ ^[0-9a-f]{40}$ ]] || {
+  echo "--action-ref must be an immutable version tag or full commit SHA" >&2
+  exit 2
+}
+
+generated="$(mktemp)"
+trap 'rm -f "$generated"' EXIT
+cat >"$generated" <<EOF
+name: Magic Edit auto-promote
+
+on:
+  push:
+    branches: [$source_branch]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: magic-edit-auto-promote-$target
+  cancel-in-progress: true
+
+jobs:
+  promote:
+    runs-on: [self-hosted, linux, x64, $runner_label]
+    timeout-minutes: 10
+    environment: $target-magic-edit-live
+    steps:
+      - uses: djson9/magic-edit/.github/actions/promote@$action_ref
+        with:
+          target: $target
+EOF
+
+if [ "$check" -eq 1 ]; then
+  cmp -s "$generated" "$output" || {
+    echo "Magic Edit auto-promote workflow differs: $output" >&2
+    exit 1
+  }
+  printf 'Magic Edit auto-promote workflow is current: %s\n' "$output"
+  exit 0
+fi
+
+if [ -e "$output" ]; then
+  cmp -s "$generated" "$output" || {
+    echo "refusing to overwrite a different workflow: $output" >&2
+    exit 1
+  }
+  printf 'Magic Edit auto-promote workflow is already installed: %s\n' "$output"
+  exit 0
+fi
+
+mkdir -p "$(dirname "$output")"
+install -m 0644 "$generated" "$output"
+printf 'Installed Magic Edit auto-promote workflow: %s\n' "$output"
+printf 'Register this block for target %s before pushing:\n' "$target"
+printf '  "autoPromote": {"sourceBranch":"%s","runnerUser":"%s","policy":"immediate"}\n' \
+  "$source_branch" "$runner_user"

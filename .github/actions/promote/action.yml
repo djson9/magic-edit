@@ -1,0 +1,26 @@
+name: Magic Edit Promote
+description: Promote a registered source branch through the Magic Edit deployment ref.
+
+inputs:
+  target:
+    description: Root-registered Magic Edit target name.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Promote source revision to Magic Edit
+      shell: bash
+      env:
+        MAGIC_EDIT_TARGET: ${{ inputs.target }}
+        MAGIC_EDIT_REPOSITORY: ${{ github.repository }}
+        MAGIC_EDIT_SOURCE_BRANCH: ${{ github.ref_name }}
+        MAGIC_EDIT_SHA: ${{ github.sha }}
+      run: |
+        set -euo pipefail
+        test "$(sudo /usr/local/sbin/magic-edit-promote --version)" = "0.5.4"
+        sudo /usr/local/sbin/magic-edit-promote \
+          "$MAGIC_EDIT_TARGET" \
+          "$MAGIC_EDIT_REPOSITORY" \
+          "$MAGIC_EDIT_SOURCE_BRANCH" \
+          "$MAGIC_EDIT_SHA"

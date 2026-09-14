@@ -51,7 +51,12 @@ function classify(paths) {
 
 describe('Magic Edit deployment classifier', () => {
   it('ships syntactically valid capture host and deploy scripts', () => {
-    for (const script of ['bin/magic-edit-capture-deploy', 'script/install-capture-host']) {
+    for (const script of [
+      'bin/magic-edit-capture-deploy',
+      'bin/magic-edit-promote',
+      'bin/magic-edit-setup-live',
+      'script/install-capture-host',
+    ]) {
       const result = spawnSync('bash', ['-n', script], { cwd: process.cwd(), encoding: 'utf8' })
       expect(result.stderr).toBe('')
       expect(result.status).toBe(0)

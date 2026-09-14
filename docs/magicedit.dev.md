@@ -109,6 +109,31 @@ The app workflow remains one step:
 
 From any local branch or worktree, `git push magic-edit` now deploys `HEAD`.
 
+### Follow a source branch automatically
+
+For immediate Live deployment whenever a source branch moves, add
+`autoPromote.sourceBranch` and `autoPromote.runnerUser` to the registered app,
+then scaffold the app-side workflow:
+
+```sh
+npx --package=@djson9/magic-edit@0.5.4 magic-edit-setup-live \
+  --target <target> \
+  --source-branch staging \
+  --runner-label <target>-production \
+  --runner-user <target>-actions-runner
+```
+
+The workflow deliberately runs no CI. It sends the repository, source branch,
+and event SHA to the installed `magic-edit-promote` command. The command rejects
+unregistered branches and stale event SHAs, then routes the commit through the
+same local bare receiver used by `git push magic-edit`; GitHub's deployment ref
+therefore retains the same exact-lease and workflow-trigger guarantees. No SSH
+private key is stored in the app repository.
+
+Use `magic-edit-setup-live ... --check` in repository maintenance to verify the
+generated workflow. The app's existing Live workflow and branded remote remain
+unchanged.
+
 ## Verification
 
 ```sh
