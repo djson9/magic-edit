@@ -37,9 +37,15 @@ type MagicEditTargetThread = {
 };
 type NativeSelectionResult = NativeSelection & { recipientThreadId?: string };
 type NativeCommentResult = { comment?: string; recipientThreadId?: string };
+type BackgroundUpdatesStatus = {
+  supported: boolean;
+  enabled: boolean;
+  active: boolean;
+};
 export type MagicEditThreadLinkTarget = 'app' | 'web';
 type MagicEditSelectorModule = {
   appMetadata?(): Promise<Record<string, unknown>>;
+  backgroundUpdatesStatus?(): Promise<BackgroundUpdatesStatus>;
   cancel?(): void;
   composeComment?(
     selection: NativeSelection,
@@ -52,6 +58,9 @@ type MagicEditSelectorModule = {
     selectedThreadId: string,
     threadLinkTarget: MagicEditThreadLinkTarget,
   ): Promise<NativeSelectionResult | null>;
+  setBackgroundUpdatesEnabled?(
+    enabled: boolean,
+  ): Promise<BackgroundUpdatesStatus>;
 };
 type NativeMagicEditBubbleProps = ViewProps & {
   active: boolean;
@@ -261,6 +270,8 @@ export function MagicEditBubble({
   const [diagnosticsAvailable, setDiagnosticsAvailable] = useState(
     runtime.hasAttachedStore(),
   );
+  const [backgroundUpdates, setBackgroundUpdates] =
+    useState<BackgroundUpdatesStatus | null>(null);
   const layoutRef = useRef<Size>({ width: 0, height: 0 });
   const positionRef = useRef<Point | null>(null);
   const dragOriginRef = useRef<Point>({ x: 0, y: 0 });
@@ -287,9 +298,20 @@ export function MagicEditBubble({
       metadata => runtime.registerAppMetadata(metadata),
       error => runtime.recordError('native_app_metadata_failed', error),
     );
+    nativeSelector?.backgroundUpdatesStatus?.().then(
+      status => {
+        setBackgroundUpdates(status);
+        runtime.recordRuntimeEvent('background_updates_status', status);
+      },
+      error => runtime.recordError('background_updates_status_failed', error),
+    );
     runtime.recordRuntimeEvent('app_state_changed', { state: AppState.currentState });
     const subscription = AppState.addEventListener('change', state => {
       runtime.recordRuntimeEvent('app_state_changed', { state });
+      nativeSelector?.backgroundUpdatesStatus?.().then(
+        status => setBackgroundUpdates(status),
+        error => runtime.recordError('background_updates_status_failed', error),
+      );
     });
     return () => subscription.remove();
   }, [runtime]);
@@ -465,8 +487,34 @@ export function MagicEditBubble({
       setPhase('idle');
     }
   }, []);
+  const toggleBackgroundUpdates = useCallback(async () => {
+    const nativeSelector = selectorModule();
+    if (!backgroundUpdates || !nativeSelector?.setBackgroundUpdatesEnabled) return;
+    setPhase('checking');
+    try {
+      const status = await nativeSelector.setBackgroundUpdatesEnabled(
+        !backgroundUpdates.enabled,
+      );
+      setBackgroundUpdates(status);
+      runtime.recordRuntimeEvent('background_updates_changed', status);
+      Alert.alert(
+        'Magic Edit',
+        status.enabled
+          ? 'Background updates are active for this development app. Force quitting the app still stops them.'
+          : 'Background updates are off.',
+      );
+    } catch (error) {
+      runtime.recordError('background_updates_change_failed', error);
+      Alert.alert(
+        'Could not change background updates',
+        error instanceof Error ? error.message : 'Please try again.',
+      );
+    } finally {
+      setPhase('idle');
+    }
+  }, [backgroundUpdates, runtime]);
   const activate = useCallback(() => {
-    if (!diagnosticsAvailable) {
+    if (!diagnosticsAvailable && backgroundUpdates?.supported !== true) {
       launchRef.current().catch(() => {});
       return;
     }
@@ -476,20 +524,38 @@ export function MagicEditBubble({
         text: 'Select interface element',
         onPress: () => launchRef.current().catch(() => {}),
       },
-      {
+      ...(diagnosticsAvailable ? [{
         text: 'Save debug metadata',
         onPress: () => { saveDebugMetadata().catch(() => {}); },
-      },
+      }] : []),
+      ...(backgroundUpdates?.supported ? [{
+        text: backgroundUpdates.enabled
+          ? 'Stop background updates'
+          : 'Keep updates active in background',
+        onPress: () => { toggleBackgroundUpdates().catch(() => {}); },
+      }] : []),
       { text: 'Cancel', style: 'cancel' as const },
     ] : [
-      {
+      ...(diagnosticsAvailable ? [{
         text: 'Save debug metadata',
         onPress: () => { saveDebugMetadata().catch(() => {}); },
-      },
+      }] : []),
+      ...(backgroundUpdates?.supported ? [{
+        text: backgroundUpdates.enabled
+          ? 'Stop background updates'
+          : 'Keep updates active in background',
+        onPress: () => { toggleBackgroundUpdates().catch(() => {}); },
+      }] : []),
       { text: 'Cancel', style: 'cancel' as const },
     ];
     Alert.alert('Magic Edit', 'Choose what you want to do.', actions);
-  }, [diagnosticsAvailable, recipientThreadIds.length, saveDebugMetadata]);
+  }, [
+    backgroundUpdates,
+    diagnosticsAvailable,
+    recipientThreadIds.length,
+    saveDebugMetadata,
+    toggleBackgroundUpdates,
+  ]);
   const activateRef = useRef(activate);
   activateRef.current = activate;
   const handleNativeTap = useCallback(() => {

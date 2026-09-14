@@ -1,3 +1,4 @@
+import AVFoundation
 import React
 import SwiftUI
 import UIKit
@@ -1646,6 +1647,139 @@ private final class MagicEditCommentViewController: UIViewController,
   }
 }
 
+private final class MagicEditBackgroundUpdateAudio: NSObject {
+  static let shared = MagicEditBackgroundUpdateAudio()
+
+  private static let preferenceKey = "DJSON9MagicEditBackgroundUpdatesEnabled"
+  private let engine = AVAudioEngine()
+  private let player = AVAudioPlayerNode()
+  private var loopBuffer: AVAudioPCMBuffer?
+  private(set) var active = false
+
+  var supported: Bool {
+    let modes = Bundle.main.object(forInfoDictionaryKey: "UIBackgroundModes") as? [String]
+    return modes?.contains("audio") == true
+  }
+
+  var enabled: Bool {
+    UserDefaults.standard.bool(forKey: Self.preferenceKey)
+  }
+
+  private override init() {
+    super.init()
+    engine.attach(player)
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(handleInterruption(_:)),
+      name: AVAudioSession.interruptionNotification,
+      object: nil
+    )
+  }
+
+  deinit {
+    NotificationCenter.default.removeObserver(self)
+  }
+
+  func status() -> [String: Any] {
+    active = engine.isRunning && player.isPlaying
+    if supported && enabled && !active {
+      try? start()
+    }
+    return [
+      "supported": supported,
+      "enabled": enabled,
+      "active": active,
+    ]
+  }
+
+  func setEnabled(_ nextEnabled: Bool) throws -> [String: Any] {
+    guard supported else {
+      throw NSError(
+        domain: "DJSON9MagicEdit",
+        code: 1,
+        userInfo: [NSLocalizedDescriptionKey: "This build does not enable background audio."]
+      )
+    }
+    if nextEnabled {
+      do {
+        try start()
+        UserDefaults.standard.set(true, forKey: Self.preferenceKey)
+      } catch {
+        stop()
+        throw error
+      }
+    } else {
+      UserDefaults.standard.set(false, forKey: Self.preferenceKey)
+      stop()
+    }
+    return status()
+  }
+
+  private func start() throws {
+    if active && engine.isRunning && player.isPlaying { return }
+
+    player.stop()
+    engine.stop()
+    engine.disconnectNodeOutput(player)
+
+    let session = AVAudioSession.sharedInstance()
+    try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
+    try session.setActive(true)
+
+    guard let format = AVAudioFormat(standardFormatWithSampleRate: 8_000, channels: 1),
+      let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 8_000) else {
+      throw NSError(
+        domain: "DJSON9MagicEdit",
+        code: 2,
+        userInfo: [NSLocalizedDescriptionKey: "Magic Edit could not create its background audio stream."]
+      )
+    }
+    buffer.frameLength = buffer.frameCapacity
+    if let samples = buffer.floatChannelData?[0] {
+      samples.update(repeating: 0, count: Int(buffer.frameLength))
+    }
+    loopBuffer = buffer
+    engine.connect(player, to: engine.mainMixerNode, format: format)
+    player.scheduleBuffer(buffer, at: nil, options: .loops)
+    engine.prepare()
+    try engine.start()
+    player.play()
+    active = engine.isRunning && player.isPlaying
+    if !active {
+      throw NSError(
+        domain: "DJSON9MagicEdit",
+        code: 3,
+        userInfo: [NSLocalizedDescriptionKey: "Magic Edit could not keep background updates active."]
+      )
+    }
+  }
+
+  private func stop(deactivateSession: Bool = true) {
+    player.stop()
+    engine.stop()
+    active = false
+    loopBuffer = nil
+    if deactivateSession {
+      try? AVAudioSession.sharedInstance().setActive(
+        false,
+        options: [.notifyOthersOnDeactivation]
+      )
+    }
+  }
+
+  @objc private func handleInterruption(_ notification: Notification) {
+    guard let value = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+      let interruption = AVAudioSession.InterruptionType(rawValue: value) else { return }
+    if interruption == .began {
+      active = false
+      return
+    }
+    if supported && enabled {
+      try? start()
+    }
+  }
+}
+
 @objc(MagicEditSelectorModule)
 final class MagicEditSelectorModule: NSObject {
   private weak var activeOverlay: MagicEditSelectionOverlay?
@@ -1666,6 +1800,29 @@ final class MagicEditSelectorModule: NSObject {
       "osVersion": UIDevice.current.systemVersion,
       "systemName": UIDevice.current.systemName,
     ])
+  }
+
+  @objc func backgroundUpdatesStatus(
+    _ resolve: @escaping RCTPromiseResolveBlock,
+    rejecter reject: @escaping RCTPromiseRejectBlock
+  ) {
+    DispatchQueue.main.async {
+      resolve(MagicEditBackgroundUpdateAudio.shared.status())
+    }
+  }
+
+  @objc func setBackgroundUpdatesEnabled(
+    _ enabled: Bool,
+    resolver resolve: @escaping RCTPromiseResolveBlock,
+    rejecter reject: @escaping RCTPromiseRejectBlock
+  ) {
+    DispatchQueue.main.async {
+      do {
+        resolve(try MagicEditBackgroundUpdateAudio.shared.setEnabled(enabled))
+      } catch {
+        reject("magic_edit_background_updates_failed", error.localizedDescription, error)
+      }
+    }
   }
 
   @objc func select(

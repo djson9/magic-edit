@@ -18,6 +18,11 @@ RCT_EXPORT_VIEW_PROPERTY(onNativeDragEnd, RCTDirectEventBlock)
 
 RCT_EXTERN_METHOD(appMetadata:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
+RCT_EXTERN_METHOD(backgroundUpdatesStatus:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+RCT_EXTERN_METHOD(setBackgroundUpdatesEnabled:(BOOL)enabled
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
 
 RCT_EXTERN_METHOD(select:(NSArray *)targetThreads
                   selectedThreadId:(NSString *)selectedThreadId

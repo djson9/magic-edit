@@ -940,6 +940,7 @@ function MagicEditBubble({
   const [diagnosticsAvailable, setDiagnosticsAvailable] = (0, import_react.useState)(
     runtime.hasAttachedStore()
   );
+  const [backgroundUpdates, setBackgroundUpdates] = (0, import_react.useState)(null);
   const layoutRef = (0, import_react.useRef)({ width: 0, height: 0 });
   const positionRef = (0, import_react.useRef)(null);
   const dragOriginRef = (0, import_react.useRef)({ x: 0, y: 0 });
@@ -964,9 +965,20 @@ function MagicEditBubble({
       (metadata) => runtime.registerAppMetadata(metadata),
       (error) => runtime.recordError("native_app_metadata_failed", error)
     );
+    nativeSelector?.backgroundUpdatesStatus?.().then(
+      (status) => {
+        setBackgroundUpdates(status);
+        runtime.recordRuntimeEvent("background_updates_status", status);
+      },
+      (error) => runtime.recordError("background_updates_status_failed", error)
+    );
     runtime.recordRuntimeEvent("app_state_changed", { state: import_react_native.AppState.currentState });
     const subscription = import_react_native.AppState.addEventListener("change", (state) => {
       runtime.recordRuntimeEvent("app_state_changed", { state });
+      nativeSelector?.backgroundUpdatesStatus?.().then(
+        (status) => setBackgroundUpdates(status),
+        (error) => runtime.recordError("background_updates_status_failed", error)
+      );
     });
     return () => subscription.remove();
   }, [runtime]);
@@ -1126,8 +1138,32 @@ ${capture.captureUrl}`
       setPhase("idle");
     }
   }, []);
+  const toggleBackgroundUpdates = (0, import_react.useCallback)(async () => {
+    const nativeSelector = selectorModule();
+    if (!backgroundUpdates || !nativeSelector?.setBackgroundUpdatesEnabled) return;
+    setPhase("checking");
+    try {
+      const status = await nativeSelector.setBackgroundUpdatesEnabled(
+        !backgroundUpdates.enabled
+      );
+      setBackgroundUpdates(status);
+      runtime.recordRuntimeEvent("background_updates_changed", status);
+      import_react_native.Alert.alert(
+        "Magic Edit",
+        status.enabled ? "Background updates are active for this development app. Force quitting the app still stops them." : "Background updates are off."
+      );
+    } catch (error) {
+      runtime.recordError("background_updates_change_failed", error);
+      import_react_native.Alert.alert(
+        "Could not change background updates",
+        error instanceof Error ? error.message : "Please try again."
+      );
+    } finally {
+      setPhase("idle");
+    }
+  }, [backgroundUpdates, runtime]);
   const activate = (0, import_react.useCallback)(() => {
-    if (!diagnosticsAvailable) {
+    if (!diagnosticsAvailable && backgroundUpdates?.supported !== true) {
       launchRef.current().catch(() => {
       });
       return;
@@ -1139,26 +1175,46 @@ ${capture.captureUrl}`
         onPress: () => launchRef.current().catch(() => {
         })
       },
-      {
+      ...diagnosticsAvailable ? [{
         text: "Save debug metadata",
         onPress: () => {
           saveDebugMetadata().catch(() => {
           });
         }
-      },
+      }] : [],
+      ...backgroundUpdates?.supported ? [{
+        text: backgroundUpdates.enabled ? "Stop background updates" : "Keep updates active in background",
+        onPress: () => {
+          toggleBackgroundUpdates().catch(() => {
+          });
+        }
+      }] : [],
       { text: "Cancel", style: "cancel" }
     ] : [
-      {
+      ...diagnosticsAvailable ? [{
         text: "Save debug metadata",
         onPress: () => {
           saveDebugMetadata().catch(() => {
           });
         }
-      },
+      }] : [],
+      ...backgroundUpdates?.supported ? [{
+        text: backgroundUpdates.enabled ? "Stop background updates" : "Keep updates active in background",
+        onPress: () => {
+          toggleBackgroundUpdates().catch(() => {
+          });
+        }
+      }] : [],
       { text: "Cancel", style: "cancel" }
     ];
     import_react_native.Alert.alert("Magic Edit", "Choose what you want to do.", actions);
-  }, [diagnosticsAvailable, recipientThreadIds.length, saveDebugMetadata]);
+  }, [
+    backgroundUpdates,
+    diagnosticsAvailable,
+    recipientThreadIds.length,
+    saveDebugMetadata,
+    toggleBackgroundUpdates
+  ]);
   const activateRef = (0, import_react.useRef)(activate);
   activateRef.current = activate;
   const handleNativeTap = (0, import_react.useCallback)(() => {

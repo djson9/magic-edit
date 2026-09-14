@@ -2,6 +2,12 @@ import type {ReactElement} from 'react'
 
 export type MagicEditThreadLinkTarget = 'app' | 'web'
 
+export type MagicEditBackgroundUpdatesStatus = {
+  supported: boolean
+  enabled: boolean
+  active: boolean
+}
+
 export type MagicEditBubbleProps = {
   apiRoot: string
   bottomInset?: number
