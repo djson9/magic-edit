@@ -18,7 +18,7 @@ runs:
         MAGIC_EDIT_SHA: ${{ github.sha }}
       run: |
         set -euo pipefail
-        test "$(sudo /usr/local/sbin/magic-edit-promote --version)" = "0.5.4"
+        test "$(/usr/local/sbin/magic-edit-promote --version)" = "0.5.4"
         sudo /usr/local/sbin/magic-edit-promote \
           "$MAGIC_EDIT_TARGET" \
           "$MAGIC_EDIT_REPOSITORY" \

@@ -2,12 +2,12 @@
 # Scaffold immediate source-branch promotion for a registered Magic Edit app.
 set -euo pipefail
 
-version=0.5.4
+version=0.5.5
 target=
 source_branch=staging
 runner_label=
 runner_user=
-action_ref="${MAGIC_EDIT_ACTION_REF:-v0.5.4}"
+action_ref="${MAGIC_EDIT_ACTION_REF:-v0.5.5}"
 output=.github/workflows/magic-edit-auto-promote.yml
 
 usage() {
@@ -18,7 +18,7 @@ options:
   --source-branch BRANCH  Branch to promote immediately (default: staging)
   --runner-label LABEL    Existing self-hosted deployment runner label
   --runner-user USER      Unprivileged account running that deployment runner
-  --action-ref REF        Immutable Magic Edit tag or commit (default: v0.5.4)
+  --action-ref REF        Immutable Magic Edit tag or commit (default: v0.5.5)
   --check                 Verify the generated workflow without changing it
   --version               Print the installer version
 EOF
