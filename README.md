@@ -13,7 +13,7 @@ Pin an immutable release and add one element:
 ```html
 <script
   type="module"
-  src="https://cdn.jsdelivr.net/gh/djson9/magic-edit@v0.5.2/dist/magic-edit.js">
+  src="https://cdn.jsdelivr.net/gh/djson9/magic-edit@v0.5.4/dist/magic-edit.js">
 </script>
 
 <magic-edit
@@ -58,7 +58,7 @@ Comments remain ordinary thread messages. Selected-element context is appended t
 After the npm release is available:
 
 ```sh
-npm install @djson9/magic-edit@0.5.2
+npm install @djson9/magic-edit@0.5.4
 ```
 
 Then import the self-registering component once:
@@ -72,7 +72,7 @@ import '@djson9/magic-edit'
 Install the same package in a React Native app and run CocoaPods normally:
 
 ```sh
-npm install @djson9/magic-edit@0.5.2
+npm install @djson9/magic-edit@0.5.4
 cd ios && pod install
 ```
 
@@ -153,6 +153,52 @@ file in `host/apps`, change its repository paths and change classifiers, and
 open a pull request. Removing a file does not delete live infrastructure;
 teardown is intentionally manual.
 
+## Immediate branch promotion
+
+A registered app can make an ordinary source branch its zero-CI Live entrypoint
+without distributing an SSH credential to GitHub Actions. Add a bounded
+`autoPromote` block to the app registration:
+
+```json
+{
+  "branch": "magic-edit",
+  "autoPromote": {
+    "sourceBranch": "staging",
+    "runnerUser": "my-app-actions-runner",
+    "policy": "immediate"
+  }
+}
+```
+
+`branch` remains the internal, Heroku-style deployment ref. `sourceBranch` is
+the only GitHub branch the framework will accept for automatic promotion, and
+`runnerUser` is the unprivileged account used by the app's existing deployment
+runner. The `immediate` policy explicitly runs without a CI or status-check
+gate. Reconciliation generates an exact, target-scoped sudo rule; the
+repository workflow cannot select another repository, branch, or target.
+
+Install the source-branch workflow from the app repository:
+
+```sh
+npx --package=@djson9/magic-edit@0.5.4 magic-edit-setup-live \
+  --target my-app \
+  --source-branch staging \
+  --runner-label my-app-production \
+  --runner-user my-app-actions-runner
+```
+
+The generated workflow runs no checkout, tests, or status-check gate. It asks
+the root-owned promoter to verify that the event SHA is still the exact source
+branch tip, then pushes that commit through the local branded receiver. The
+receiver applies its existing exact lease, mirrors the commit to GitHub's
+`magic-edit` ref, and triggers the existing Live deployment workflow. An older
+queued event becomes a successful no-op after a newer source push arrives.
+
+The setup command is idempotent and refuses to overwrite a different workflow.
+Run the same command with `--check` to detect drift. Manual `git push
+magic-edit` remains available for deploying another branch or rolling back;
+the next source-branch push resumes automatic promotion.
+
 ## Branded Git remote
 
 The same host can expose registered apps through `magicedit.dev`. The complete
@@ -179,7 +225,9 @@ with the exact Actions checkout path.
 After that bootstrap, app registration is GitOps: merge
 `host/apps/my-app.json` to `main` and the
 [`Reconcile Magic Edit Apps`](.github/workflows/reconcile-apps.yml) workflow
-converges and verifies the host automatically.
+converges and verifies the host automatically. Registrations with
+`autoPromote` also receive a validated, target-scoped sudo rule for their
+generated source-branch workflow.
 
 Authorize a dedicated key from the developer machine:
 

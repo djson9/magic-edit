@@ -2,7 +2,7 @@
 # Reconcile version-controlled Magic Edit app registrations onto the host.
 set -euo pipefail
 
-version=0.4.8
+version=0.5.4
 default_source_root=/var/lib/magic-edit-actions-runner/app/_work/magic-edit/magic-edit/host/apps
 config_root="${MAGIC_EDIT_CONFIG_ROOT:-/etc/magic-edit/apps}"
 register_remote="${MAGIC_EDIT_REGISTER_REMOTE:-/usr/local/sbin/magic-edit-register-remote}"
@@ -11,6 +11,9 @@ repo_root="${MAGIC_EDIT_REPO_ROOT:-/home/davidson/workspace}"
 repo_user_required="${MAGIC_EDIT_REPO_USER:-davidson}"
 state_root="${MAGIC_EDIT_STATE_ROOT:-/var/lib}"
 adapter_root="${MAGIC_EDIT_ADAPTER_ROOT:-/usr/local/sbin}"
+promote_command="${MAGIC_EDIT_PROMOTE_COMMAND:-/usr/local/sbin/magic-edit-promote}"
+sudoers_root="${MAGIC_EDIT_SUDOERS_ROOT:-/etc/sudoers.d}"
+visudo_command="${MAGIC_EDIT_VISUDO_COMMAND:-visudo}"
 
 usage() {
   cat <<'EOF'
@@ -33,6 +36,7 @@ stat_mode() {
 validate_config() {
   local config="$1" target repository repo_name branch repo_path repo_user
   local state_file state_relative adapter adapter_relative app_root path
+  local source_branch runner_user
 
   [ -f "$config" ] && [ ! -L "$config" ] || return 1
   target="$(basename "$config" .json)"
@@ -56,10 +60,17 @@ validate_config() {
     all(.hotReloadPaths[]; type == "string") and
     ((.ignorePaths // []) | type == "array") and
     all((.ignorePaths // [])[]; type == "string") and
+    ((has("autoPromote") | not) or (
+      (.autoPromote | type == "object") and
+      (.autoPromote.sourceBranch | type == "string") and
+      (.autoPromote.runnerUser | type == "string") and
+      (.autoPromote.policy == "immediate") and
+      ((.autoPromote | keys - ["sourceBranch", "runnerUser", "policy"]) | length == 0)
+    )) and
     ((keys - [
       "schemaVersion", "repository", "branch", "repoPath", "repoUser",
       "stateFile", "adapter", "appRoot", "unknownAppChange", "nativePaths",
-      "hotReloadPaths", "ignorePaths"
+      "hotReloadPaths", "ignorePaths", "autoPromote"
     ]) | length == 0)
   ' "$config" >/dev/null || return 1
 
@@ -85,11 +96,65 @@ validate_config() {
   [[ "$app_root" =~ ^[A-Za-z0-9._/-]+$ ]] || return 1
   [[ "$app_root" != /* && "/$app_root/" != *"/../"* ]] || return 1
 
+  if jq -e 'has("autoPromote")' "$config" >/dev/null; then
+    source_branch="$(jq -er '.autoPromote.sourceBranch' "$config")"
+    runner_user="$(jq -er '.autoPromote.runnerUser' "$config")"
+    git check-ref-format "refs/heads/$source_branch" >/dev/null || return 1
+    [ "$source_branch" != "$branch" ] || return 1
+    [[ "$runner_user" =~ ^[a-z_][a-z0-9_-]*$ ]] || return 1
+  fi
+
   while IFS= read -r path; do
     [ -n "$path" ] || return 1
     [[ "$path" != /* && "/$path/" != *"/../"* ]] || return 1
     [[ "$path" != *$'\n'* && "$path" != *$'\r'* ]] || return 1
   done < <(jq -er '.nativePaths[], .hotReloadPaths[], (.ignorePaths[]? // empty)' "$config")
+}
+
+reconcile_auto_promote() {
+  local mode="$1" target="$2" config="$3"
+  local destination expected runner_user source_branch repository staged
+
+  destination="$sudoers_root/magic-edit-promote-$target"
+  if ! jq -e 'has("autoPromote")' "$config" >/dev/null; then
+    if [ "$mode" = apply ] && [ -e "$destination" ]; then
+      rm -f "$destination"
+    fi
+    [ ! -e "$destination" ]
+    return
+  fi
+
+  [ -x "$promote_command" ] && [ ! -L "$promote_command" ]
+  runner_user="$(jq -er '.autoPromote.runnerUser' "$config")"
+  source_branch="$(jq -er '.autoPromote.sourceBranch' "$config")"
+  repository="$(jq -er '.repository' "$config")"
+  if [ "$config_root" = /etc/magic-edit/apps ]; then
+    id "$runner_user" >/dev/null
+  fi
+  expected="$runner_user ALL=(root) NOPASSWD: $promote_command $target $repository $source_branch *"
+
+  if [ "$mode" = apply ]; then
+    install -d -m 0755 "$sudoers_root"
+    staged="$(mktemp "$sudoers_root/.magic-edit-promote-$target.XXXXXX")"
+    trap 'rm -f "${staged:-}"' RETURN
+    printf '%s\n' "$expected" >"$staged"
+    chmod 0440 "$staged"
+    "$visudo_command" -cf "$staged" >/dev/null
+    if [ "$config_root" = /etc/magic-edit/apps ]; then
+      chown root:root "$staged"
+    fi
+    mv -f "$staged" "$destination"
+    staged=""
+    trap - RETURN
+  fi
+
+  [ -f "$destination" ] && [ ! -L "$destination" ]
+  [ "$(cat "$destination")" = "$expected" ]
+  "$visudo_command" -cf "$destination" >/dev/null
+  if [ "$config_root" = /etc/magic-edit/apps ]; then
+    [ "$(stat_owner "$destination")" -eq 0 ]
+    [ "$(stat_mode "$destination")" = 440 ]
+  fi
 }
 
 case "${1:-}" in
@@ -126,6 +191,8 @@ if [ "$config_root" = /etc/magic-edit/apps ]; then
     exit 1
   }
   [ -x "$register_remote" ] && [ ! -L "$register_remote" ]
+  [ "$promote_command" = /usr/local/sbin/magic-edit-promote ]
+  [ "$sudoers_root" = /etc/sudoers.d ]
 fi
 
 shopt -s nullglob
@@ -193,5 +260,6 @@ for config in "${configs[@]}"; do
     [ $((8#$(stat_mode "$destination") & 022)) -eq 0 ]
   fi
   "$register_remote" --check "$target"
+  reconcile_auto_promote "$mode" "$target" "$config"
   printf 'Reconciled Magic Edit app: %s\n' "$target"
 done

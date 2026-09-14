@@ -1,0 +1,131 @@
+#!/usr/bin/env bash
+# Promote a configured source branch through the branded Magic Edit receiver.
+set -euo pipefail
+
+version=0.5.4
+config_root="${MAGIC_EDIT_CONFIG_ROOT:-/etc/magic-edit/apps}"
+remote_root="${MAGIC_EDIT_REMOTE_ROOT:-/home/git}"
+
+usage() {
+  cat <<'EOF'
+usage:
+  magic-edit-promote --version
+  magic-edit-promote validate CONFIG_JSON REPOSITORY SOURCE_BRANCH SHA
+  magic-edit-promote TARGET REPOSITORY SOURCE_BRANCH SHA
+EOF
+}
+
+validate_promotion() {
+  local config="$1" repository="$2" source_branch="$3" requested_sha="$4"
+  local configured_repository configured_source_branch deploy_branch
+
+  jq -e '
+    .schemaVersion == 1 and
+    (.repository | type == "string") and
+    (.branch | type == "string") and
+    (.autoPromote | type == "object") and
+    (.autoPromote.sourceBranch | type == "string") and
+    (.autoPromote.runnerUser | type == "string") and
+    (.autoPromote.policy == "immediate") and
+    ((.autoPromote | keys - ["sourceBranch", "runnerUser", "policy"]) | length == 0)
+  ' "$config" >/dev/null
+
+  configured_repository="$(jq -er '.repository' "$config")"
+  deploy_branch="$(jq -er '.branch' "$config")"
+  configured_source_branch="$(jq -er '.autoPromote.sourceBranch' "$config")"
+
+  [[ "$repository" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]
+  [ "$repository" = "$configured_repository" ]
+  [ "$source_branch" = "$configured_source_branch" ]
+  [ "$source_branch" != "$deploy_branch" ]
+  git check-ref-format "refs/heads/$source_branch" >/dev/null
+  git check-ref-format "refs/heads/$deploy_branch" >/dev/null
+  [[ "$requested_sha" =~ ^[0-9a-f]{40}$ ]]
+}
+
+case "${1:-}" in
+  --version)
+    printf '%s\n' "$version"
+    exit 0
+    ;;
+  validate)
+    [ "$#" -eq 5 ] || { usage >&2; exit 2; }
+    validate_promotion "$2" "$3" "$4" "$5"
+    exit 0
+    ;;
+esac
+
+[ "$#" -eq 4 ] || { usage >&2; exit 2; }
+[ "$(id -u)" -eq 0 ] || {
+  echo "Magic Edit promotion must run as root" >&2
+  exit 1
+}
+
+target="$1"
+repository="$2"
+source_branch="$3"
+requested_sha="$4"
+[[ "$target" =~ ^[a-z0-9][a-z0-9-]*$ ]]
+
+config="$config_root/$target.json"
+[ -f "$config" ] && [ ! -L "$config" ] || {
+  echo "registered Magic Edit target is unavailable: $target" >&2
+  exit 1
+}
+config_owner="$(stat -c %u "$config" 2>/dev/null || stat -f %u "$config")"
+config_permissions="$(stat -c %a "$config" 2>/dev/null || stat -f %Lp "$config")"
+[ "$config_owner" -eq 0 ] && [ $((8#$config_permissions & 022)) -eq 0 ] || {
+  echo "Magic Edit target configuration must be root-owned and not group/world writable" >&2
+  exit 1
+}
+validate_promotion "$config" "$repository" "$source_branch" "$requested_sha"
+
+deploy_branch="$(jq -er '.branch' "$config")"
+repo_path="$(jq -er '.repoPath' "$config")"
+repo_user="$(jq -er '.repoUser' "$config")"
+[[ "$repo_path" = /* ]]
+[[ "$repo_user" =~ ^[a-z_][a-z0-9_-]*$ ]]
+[ -d "$repo_path" ] && [ ! -L "$repo_path" ] || {
+  echo "registered repository checkout is unavailable: $repo_path" >&2
+  exit 1
+}
+
+bare_repo="$remote_root/$target.git"
+[ -d "$bare_repo" ] && [ ! -L "$bare_repo" ] || {
+  echo "Magic Edit remote is unavailable: $target" >&2
+  exit 1
+}
+bare_repo="$(readlink -f "$bare_repo")"
+[ "$bare_repo" = "$remote_root/$target.git" ]
+[ "$(git -c safe.directory="$bare_repo" --git-dir="$bare_repo" config --get magicedit.target)" = "$target" ]
+
+repo_git() {
+  sudo -u "$repo_user" -H git -C "$repo_path" "$@"
+}
+
+repo_git fetch --quiet origin \
+  "+refs/heads/$source_branch:refs/remotes/origin/$source_branch"
+current_source_sha="$(repo_git rev-parse --verify "refs/remotes/origin/$source_branch")"
+if [ "$current_source_sha" != "$requested_sha" ]; then
+  printf 'Skipping stale Magic Edit promotion for %s: requested %s, current %s\n' \
+    "$target" "$requested_sha" "$current_source_sha"
+  exit 0
+fi
+repo_git cat-file -e "$requested_sha^{commit}"
+
+# Push through the local bare receiver after all root-owned registration checks
+# pass. The source checkout is intentionally unreadable by the public git
+# account. Restore receiver object/ref ownership after receive-pack completes so
+# later SSH pushes remain unprivileged. The receiver applies the existing exact
+# lease before either its advertised ref or GitHub's mirrored ref advances.
+git -c safe.directory="$repo_path" \
+  -C "$repo_path" \
+  push --porcelain --force "$bare_repo" \
+  "$requested_sha:refs/heads/$deploy_branch"
+chown -R git:git "$bare_repo/objects" "$bare_repo/refs"
+
+promoted_sha="$(git -c safe.directory="$bare_repo" --git-dir="$bare_repo" \
+  rev-parse --verify "refs/heads/$deploy_branch")"
+[ "$promoted_sha" = "$requested_sha" ]
+printf 'Promoted %s/%s@%s to Magic Edit target %s\n' \
+  "$repository" "$source_branch" "$requested_sha" "$target"

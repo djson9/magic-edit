@@ -55,6 +55,33 @@ describe('Magic Edit declarative app registrations', () => {
     ).not.toBe(0)
   })
 
+  it('validates a bounded immediate-promotion registration', () => {
+    const autoPromote = {
+      sourceBranch: 'staging',
+      runnerUser: 'example-actions-runner',
+      policy: 'immediate',
+    }
+    expect(validate('example-app', { ...validConfig, autoPromote }).status).toBe(0)
+    expect(
+      validate('example-app', {
+        ...validConfig,
+        autoPromote: { ...autoPromote, sourceBranch: 'magic-edit' },
+      }).status,
+    ).not.toBe(0)
+    expect(
+      validate('example-app', {
+        ...validConfig,
+        autoPromote: { ...autoPromote, runnerUser: 'unsafe user' },
+      }).status,
+    ).not.toBe(0)
+    expect(
+      validate('example-app', {
+        ...validConfig,
+        autoPromote: { ...autoPromote, policy: 'after-checks' },
+      }).status,
+    ).not.toBe(0)
+  })
+
   it('applies and checks an app registration idempotently', () => {
     const directory = mkdtempSync(join(tmpdir(), 'magic-edit-apply-'))
     const source = join(directory, 'source')
@@ -62,20 +89,26 @@ describe('Magic Edit declarative app registrations', () => {
     const bin = join(directory, 'bin')
     const repos = join(directory, 'repos')
     const state = join(directory, 'state')
+    const sudoers = join(directory, 'sudoers')
     const register = join(bin, 'register')
     const adapter = join(bin, 'example-app-magic-edit-sync')
+    const promote = join(bin, 'magic-edit-promote')
+    const visudo = join(bin, 'visudo')
     mkdirSync(source)
     mkdirSync(bin)
     mkdirSync(repos)
     mkdirSync(join(repos, 'example-app'))
     mkdirSync(state)
+    mkdirSync(sudoers)
     const sourceConfig = join(source, 'example-app.json')
+    const runnerUser = process.env.USER || 'runner'
     const sourceContents = JSON.stringify({
         ...validConfig,
         repoPath: join(repos, 'example-app'),
-        repoUser: process.env.USER,
+        repoUser: runnerUser,
         stateFile: join(state, 'example-app-magic-edit-live/source-revision'),
         adapter,
+        autoPromote: { sourceBranch: 'staging', runnerUser, policy: 'immediate' },
       }, null, 3)
     writeFileSync(sourceConfig, sourceContents)
     writeFileSync(
@@ -83,8 +116,12 @@ describe('Magic Edit declarative app registrations', () => {
       '#!/bin/sh\ncase "$1" in --check) shift;; esac\ntest "$1" = example-app\n',
     )
     writeFileSync(adapter, '#!/bin/sh\nexit 0\n')
+    writeFileSync(promote, '#!/bin/sh\nexit 0\n')
+    writeFileSync(visudo, '#!/bin/sh\ntest "$1" = -cf\ntest -f "$2"\n')
     chmodSync(register, 0o755)
     chmodSync(adapter, 0o755)
+    chmodSync(promote, 0o755)
+    chmodSync(visudo, 0o755)
 
     const env = {
       ...process.env,
@@ -92,9 +129,12 @@ describe('Magic Edit declarative app registrations', () => {
       MAGIC_EDIT_EXPECTED_SOURCE_ROOT: source,
       MAGIC_EDIT_REGISTER_REMOTE: register,
       MAGIC_EDIT_REPO_ROOT: repos,
-      MAGIC_EDIT_REPO_USER: process.env.USER,
+      MAGIC_EDIT_REPO_USER: runnerUser,
       MAGIC_EDIT_STATE_ROOT: state,
       MAGIC_EDIT_ADAPTER_ROOT: bin,
+      MAGIC_EDIT_PROMOTE_COMMAND: promote,
+      MAGIC_EDIT_SUDOERS_ROOT: sudoers,
+      MAGIC_EDIT_VISUDO_COMMAND: visudo,
     }
     const args = ['bin/magic-edit-reconcile-apps', '--apply', source]
     const first = spawnSync('bash', args, { cwd: process.cwd(), encoding: 'utf8', env })
@@ -110,5 +150,8 @@ describe('Magic Edit declarative app registrations', () => {
     expect(second.status).toBe(0)
     expect(check.status).toBe(0)
     expect(readFileSync(join(installed, 'example-app.json'), 'utf8')).toBe(sourceContents)
-  })
+    expect(readFileSync(join(sudoers, 'magic-edit-promote-example-app'), 'utf8')).toBe(
+      `${runnerUser} ALL=(root) NOPASSWD: ${promote} example-app djson9/example-app staging *\n`,
+    )
+  }, 15_000)
 })
