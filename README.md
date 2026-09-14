@@ -13,7 +13,7 @@ Pin an immutable release and add one element:
 ```html
 <script
   type="module"
-  src="https://cdn.jsdelivr.net/gh/djson9/magic-edit@v0.5.4/dist/magic-edit.js">
+  src="https://cdn.jsdelivr.net/gh/djson9/magic-edit@v0.5.5/dist/magic-edit.js">
 </script>
 
 <magic-edit
@@ -58,7 +58,7 @@ Comments remain ordinary thread messages. Selected-element context is appended t
 After the npm release is available:
 
 ```sh
-npm install @djson9/magic-edit@0.5.4
+npm install @djson9/magic-edit@0.5.5
 ```
 
 Then import the self-registering component once:
@@ -72,7 +72,7 @@ import '@djson9/magic-edit'
 Install the same package in a React Native app and run CocoaPods normally:
 
 ```sh
-npm install @djson9/magic-edit@0.5.4
+npm install @djson9/magic-edit@0.5.5
 cd ios && pod install
 ```
 
@@ -180,7 +180,7 @@ repository workflow cannot select another repository, branch, or target.
 Install the source-branch workflow from the app repository:
 
 ```sh
-npm exec --yes --package='github:djson9/magic-edit#v0.5.4' -- magic-edit-setup-live \
+npm exec --yes --package='github:djson9/magic-edit#v0.5.5' -- magic-edit-setup-live \
   --target my-app \
   --source-branch staging \
   --runner-label my-app-production \

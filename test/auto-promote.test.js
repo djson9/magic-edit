@@ -52,6 +52,12 @@ describe('Magic Edit automatic promotion', () => {
     expect(source).toContain('chown -R git:git "$bare_repo/objects" "$bare_repo/refs"')
     expect(source).toContain('Skipping stale Magic Edit promotion')
   })
+
+  it('does not require privilege for the read-only installed version probe', () => {
+    const action = readFileSync('.github/actions/promote/action.yml', 'utf8')
+    expect(action).toContain('$(/usr/local/sbin/magic-edit-promote --version)')
+    expect(action).not.toContain('$(sudo /usr/local/sbin/magic-edit-promote --version)')
+  })
 })
 
 describe('Magic Edit live workflow scaffolder', () => {

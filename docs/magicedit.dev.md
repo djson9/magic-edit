@@ -116,7 +116,7 @@ For immediate Live deployment whenever a source branch moves, add
 then scaffold the app-side workflow:
 
 ```sh
-npm exec --yes --package='github:djson9/magic-edit#v0.5.4' -- magic-edit-setup-live \
+npm exec --yes --package='github:djson9/magic-edit#v0.5.5' -- magic-edit-setup-live \
   --target <target> \
   --source-branch staging \
   --runner-label <target>-production \
