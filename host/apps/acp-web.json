@@ -2,6 +2,11 @@
   "schemaVersion": 1,
   "repository": "djson9/acp-web",
   "branch": "magic-edit",
+  "autoPromote": {
+    "sourceBranch": "staging",
+    "runnerUser": "acp-actions-runner",
+    "policy": "immediate"
+  },
   "repoPath": "/home/davidson/workspace/acp-web",
   "repoUser": "davidson",
   "stateFile": "/var/lib/acp-web-magic-edit-live/source-revision",
