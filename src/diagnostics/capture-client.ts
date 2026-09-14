@@ -10,9 +10,17 @@ export type MagicEditCaptureReceipt = {
   latestUrl: string
   storedAt: string
   byteSize: number
+  clientTiming: {
+    snapshotDurationMs: number
+    serializationDurationMs: number
+    uploadDurationMs: number
+    totalDurationMs: number
+  }
 }
 
-function receipt(value: unknown): MagicEditCaptureReceipt {
+type MagicEditCaptureServerReceipt = Omit<MagicEditCaptureReceipt, 'clientTiming'>
+
+function receipt(value: unknown): MagicEditCaptureServerReceipt {
   if (!value || typeof value !== 'object') throw new Error('Magic Edit returned an invalid capture receipt.')
   const candidate = value as Record<string, unknown>
   if (
@@ -23,7 +31,7 @@ function receipt(value: unknown): MagicEditCaptureReceipt {
     typeof candidate.storedAt !== 'string' ||
     typeof candidate.byteSize !== 'number'
   ) throw new Error('Magic Edit returned an invalid capture receipt.')
-  return candidate as MagicEditCaptureReceipt
+  return candidate as MagicEditCaptureServerReceipt
 }
 
 function monotonicNow() {
@@ -33,9 +41,20 @@ function monotonicNow() {
 
 export async function uploadMagicEditCapture(fetcher: typeof fetch = fetch) {
   const runtime = diagnosticRuntime()
+  const totalStarted = monotonicNow()
   runtime.recordRuntimeEvent('capture_upload_started')
+  const snapshotStarted = monotonicNow()
   const snapshot = runtime.snapshot()
+  const snapshotDurationMs = monotonicNow() - snapshotStarted
+  const serializationStarted = monotonicNow()
   const body = JSON.stringify(snapshot)
+  const serializationDurationMs = monotonicNow() - serializationStarted
+  const bodyByteSize = utf8ByteLength(body)
+  runtime.recordRuntimeEvent('capture_prepared', {
+    byteSize: bodyByteSize,
+    serializationDurationMs,
+    snapshotDurationMs,
+  })
   const appId = typeof snapshot.app.id === 'string' && snapshot.app.id.trim()
     ? snapshot.app.id.trim()
     : 'unknown-app'
@@ -59,16 +78,25 @@ export async function uploadMagicEditCapture(fetcher: typeof fetch = fetch) {
       throw new Error(`Magic Edit capture failed: ${code}`)
     }
     const result = receipt(payload)
+    const uploadDurationMs = monotonicNow() - started
     runtime.recordRuntimeEvent('capture_upload_succeeded', {
       captureId: result.captureId,
-      byteSize: utf8ByteLength(body),
-      durationMs: monotonicNow() - started,
+      byteSize: bodyByteSize,
+      durationMs: uploadDurationMs,
     })
-    return result
+    return {
+      ...result,
+      clientTiming: {
+        snapshotDurationMs,
+        serializationDurationMs,
+        uploadDurationMs,
+        totalDurationMs: monotonicNow() - totalStarted,
+      },
+    }
   } catch (error) {
     runtime.recordRuntimeEvent('capture_upload_failed', {
       error,
-      byteSize: utf8ByteLength(body),
+      byteSize: bodyByteSize,
       durationMs: monotonicNow() - started,
     })
     throw error

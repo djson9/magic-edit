@@ -1,5 +1,6 @@
 import { normalizeDiagnosticValue } from './normalize'
 import { installNetworkRecorder, restoreNetworkRecorderForTests } from './network'
+import { diagnosticStateChanges } from './state-changes'
 
 export type DiagnosticClock = {
   now(): number
@@ -11,6 +12,10 @@ type StoreState = {
   lastActionAt: number | null
   currentState: unknown
   transitions: Array<Record<string, unknown>>
+  includeStateSnapshots: boolean
+  maximumStateChanges: number
+  maximumTransitions: number
+  droppedTransitions: number
 }
 
 type PendingOperation = {
@@ -24,6 +29,19 @@ type PendingOperation = {
 }
 
 type RuntimeListener = () => void
+
+export type DiagnosticStoreOptions = {
+  includeStateSnapshots?: boolean
+  maximumStateChanges?: number
+  maximumTransitions?: number
+}
+
+const DEFAULT_MAXIMUM_STATE_CHANGES = 256
+const DEFAULT_MAXIMUM_TRANSITIONS = 200
+const MAXIMUM_NETWORK_REQUESTS = 200
+const MAXIMUM_RUNTIME_EVENTS = 200
+const MAXIMUM_RECORDER_ERRORS = 50
+const MAXIMUM_SETTLED_OPERATIONS = 200
 
 const DEFAULT_CLOCK: DiagnosticClock = {
   now: () => Date.now(),
@@ -95,6 +113,17 @@ function actionStormCount(transitions: Array<Record<string, unknown>>) {
   return storms
 }
 
+function positiveInteger(value: number | undefined, fallback: number) {
+  return Number.isSafeInteger(value) && Number(value) > 0 ? Number(value) : fallback
+}
+
+function appendBounded<T>(values: T[], value: T, maximum: number) {
+  values.push(value)
+  const dropped = Math.max(0, values.length - maximum)
+  if (dropped > 0) values.splice(0, dropped)
+  return dropped
+}
+
 export class MagicEditDiagnosticRuntime {
   private clock: DiagnosticClock = DEFAULT_CLOCK
   private nextStoreNumber = 1
@@ -108,6 +137,10 @@ export class MagicEditDiagnosticRuntime {
   private activeNetwork = new Map<number, Record<string, unknown>>()
   private runtimeEvents: Array<Record<string, unknown>> = []
   private recorderErrors: Array<Record<string, unknown>> = []
+  private droppedNetworkRequests = 0
+  private droppedRuntimeEvents = 0
+  private droppedRecorderErrors = 0
+  private droppedSettledOperations = 0
   private listeners = new Set<RuntimeListener>()
   private appMetadata: Record<string, unknown> = (() => {
     const environment = globalThis as {
@@ -130,14 +163,24 @@ export class MagicEditDiagnosticRuntime {
     return { now: this.clock.now(), monotonicNow: this.clock.monotonicNow() }
   }
 
-  attachStore(store: object, initialState: unknown) {
+  attachStore(store: object, initialState: unknown, options: DiagnosticStoreOptions = {}) {
     const existing = this.stores.get(store)
     if (existing) return existing.storeId
     const state: StoreState = {
       storeId: `store-${this.nextStoreNumber++}`,
       lastActionAt: null,
-      currentState: normalizeDiagnosticValue(initialState),
+      currentState: initialState,
       transitions: [],
+      includeStateSnapshots: options.includeStateSnapshots === true,
+      maximumStateChanges: positiveInteger(
+        options.maximumStateChanges,
+        DEFAULT_MAXIMUM_STATE_CHANGES,
+      ),
+      maximumTransitions: positiveInteger(
+        options.maximumTransitions,
+        DEFAULT_MAXIMUM_TRANSITIONS,
+      ),
+      droppedTransitions: 0,
     }
     this.stores.set(store, state)
     this.storeStates.set(state.storeId, state)
@@ -169,9 +212,15 @@ export class MagicEditDiagnosticRuntime {
     return this.globalSequence
   }
 
+  updateStoreState(storeId: string, currentState: unknown) {
+    const store = this.storeStates.get(storeId)
+    if (store) store.currentState = currentState
+  }
+
   recordAction(
     storeId: string,
     action: unknown,
+    recordedAction: unknown,
     before: unknown,
     after: unknown,
     startedAt: number,
@@ -185,6 +234,12 @@ export class MagicEditDiagnosticRuntime {
     try {
       const sequence = ++this.globalSequence
       const changedSlices = topLevelChanges(before, after)
+      const stateChanges = diagnosticStateChanges(
+        before,
+        after,
+        store.maximumStateChanges,
+      )
+      const noOp = stateChanges.changes.length === 0 && !stateChanges.truncated
       const transition: Record<string, unknown> = {
         sequence,
         storeId,
@@ -195,14 +250,23 @@ export class MagicEditDiagnosticRuntime {
         dispatchDurationMs: Math.max(0, completedMonotonicAtMs - startedMonotonicAtMs),
         sincePreviousActionMs: store.lastActionAt === null ? null : Math.max(0, startedAt - store.lastActionAt),
         changedSlices,
-        noOp: before === after,
-        action: normalizeDiagnosticValue(action),
-        resultingState: normalizeDiagnosticValue(after),
+        noOp,
+        action: normalizeDiagnosticValue(recordedAction),
+        stateChanges: stateChanges.changes,
+        stateChangesTruncated: stateChanges.truncated,
+        ...(!noOp && store.includeStateSnapshots
+          ? { resultingState: normalizeDiagnosticValue(after) }
+          : {}),
         ...(didThrow ? { threw: normalizeDiagnosticValue(thrown) } : {}),
       }
       store.lastActionAt = startedAt
-      store.currentState = transition.resultingState
+      store.currentState = after
       store.transitions.push(transition)
+      if (store.transitions.length > store.maximumTransitions) {
+        const dropCount = store.transitions.length - store.maximumTransitions
+        store.transitions.splice(0, dropCount)
+        store.droppedTransitions += dropCount
+      }
       this.correlateOperation(storeId, action, transition)
     } catch (error) {
       this.recordError('redux_record_failed', error)
@@ -221,13 +285,13 @@ export class MagicEditDiagnosticRuntime {
   recordRuntimeEvent(type: string, details: Record<string, unknown> = {}) {
     try {
       const now = this.clock.now()
-      this.runtimeEvents.push({
+      this.droppedRuntimeEvents += appendBounded(this.runtimeEvents, {
         type,
         at: iso(now),
         wallTimeMs: now,
         monotonicAtMs: this.clock.monotonicNow(),
         details: normalizeDiagnosticValue(details),
-      })
+      }, MAXIMUM_RUNTIME_EVENTS)
     } catch (error) {
       this.recordError('runtime_event_failed', error)
     }
@@ -253,7 +317,11 @@ export class MagicEditDiagnosticRuntime {
       retryOfSequence: this.retryCandidate(details),
     }
     this.activeNetwork.set(sequence, record)
-    this.networkRequests.push(record)
+    this.droppedNetworkRequests += appendBounded(
+      this.networkRequests,
+      record,
+      MAXIMUM_NETWORK_REQUESTS,
+    )
     return sequence
   }
 
@@ -273,12 +341,12 @@ export class MagicEditDiagnosticRuntime {
 
   recordError(code: string, error: unknown) {
     const now = this.clock.now()
-    this.recorderErrors.push({
+    this.droppedRecorderErrors += appendBounded(this.recorderErrors, {
       code,
       at: iso(now),
       wallTimeMs: now,
       error: normalizeDiagnosticValue(error),
-    })
+    }, MAXIMUM_RECORDER_ERRORS)
   }
 
   snapshot() {
@@ -286,8 +354,9 @@ export class MagicEditDiagnosticRuntime {
     const monotonic = this.clock.monotonicNow()
     const stores = Array.from(this.storeStates.values(), store => ({
       storeId: store.storeId,
-      currentState: store.currentState,
+      currentState: normalizeDiagnosticValue(store.currentState),
       transitions: store.transitions,
+      droppedTransitions: store.droppedTransitions,
     }))
     const transitions = stores.flatMap(store => store.transitions) as Array<Record<string, unknown>>
     transitions.sort((left, right) => Number(left.sequence) - Number(right.sequence))
@@ -322,7 +391,9 @@ export class MagicEditDiagnosticRuntime {
       runtimeEvents: this.runtimeEvents,
       recorderErrors: this.recorderErrors,
       summary: {
-        actions: transitions.length,
+        actions: this.globalSequence,
+        retainedActions: transitions.length,
+        droppedActions: stores.reduce((total, store) => total + store.droppedTransitions, 0),
         stores: stores.length,
         slowDispatches: transitions.filter(entry => Number(entry.dispatchDurationMs) > 16).length,
         noOpActions: transitions.filter(entry => entry.noOp === true).length,
@@ -332,12 +403,16 @@ export class MagicEditDiagnosticRuntime {
         mostChangedSlice,
         largestInterActionGapMs: gaps.length ? Math.max(...gaps) : null,
         networkRequests: this.networkRequests.length,
+        droppedNetworkRequests: this.droppedNetworkRequests,
         inFlightRequests: this.activeNetwork.size,
         peakNetworkConcurrency: this.networkRequests.reduce(
           (peak, request) => Math.max(peak, Number(request.concurrencyAtStart) || 0),
           0,
         ),
         recorderErrors: this.recorderErrors.length,
+        droppedRuntimeEvents: this.droppedRuntimeEvents,
+        droppedRecorderErrors: this.droppedRecorderErrors,
+        droppedSettledOperations: this.droppedSettledOperations,
       },
     }
   }
@@ -357,6 +432,10 @@ export class MagicEditDiagnosticRuntime {
     this.activeNetwork = new Map()
     this.runtimeEvents = []
     this.recorderErrors = []
+    this.droppedNetworkRequests = 0
+    this.droppedRuntimeEvents = 0
+    this.droppedRecorderErrors = 0
+    this.droppedSettledOperations = 0
     this.appMetadata = { id: 'unknown-app', platform: 'unknown' }
     this.networkInstalled = false
     restoreNetworkRecorderForTests()
@@ -382,7 +461,7 @@ export class MagicEditDiagnosticRuntime {
     const pending = this.pendingOperations.get(key)
     const startedAt = pending?.startedAt ?? Number(transition.wallTimeMs)
     const startedMonotonicAtMs = pending?.startedMonotonicAtMs ?? Number(transition.monotonicAtMs)
-    this.settledOperations.push({
+    this.droppedSettledOperations += appendBounded(this.settledOperations, {
       storeId,
       requestId: details.requestId,
       operation: pending?.operation ?? details.operation,
@@ -396,7 +475,7 @@ export class MagicEditDiagnosticRuntime {
       conditionRejected: details.condition,
       pendingAction: pending?.action ?? null,
       settledAction: transition.action,
-    })
+    }, MAXIMUM_SETTLED_OPERATIONS)
     this.pendingOperations.delete(key)
   }
 

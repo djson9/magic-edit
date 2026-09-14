@@ -476,7 +476,7 @@ export function MagicEditBubble({
       const capture = await uploadMagicEditCapture();
       Alert.alert(
         'Magic Edit capture saved',
-        `Capture ${capture.captureId}\n${capture.captureUrl}`,
+        `Capture ${capture.captureId}\n${(capture.byteSize / 1024).toFixed(1)} KB in ${(capture.clientTiming.totalDurationMs / 1000).toFixed(1)}s\n${capture.captureUrl}`,
       );
     } catch (error) {
       Alert.alert(
