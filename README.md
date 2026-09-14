@@ -180,7 +180,7 @@ repository workflow cannot select another repository, branch, or target.
 Install the source-branch workflow from the app repository:
 
 ```sh
-npx --package=@djson9/magic-edit@0.5.4 magic-edit-setup-live \
+npm exec --yes --package='github:djson9/magic-edit#v0.5.4' -- magic-edit-setup-live \
   --target my-app \
   --source-branch staging \
   --runner-label my-app-production \
