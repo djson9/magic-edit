@@ -13,7 +13,7 @@ Pin an immutable release and add one element:
 ```html
 <script
   type="module"
-  src="https://cdn.jsdelivr.net/gh/djson9/magic-edit@v0.4.8/dist/magic-edit.js">
+  src="https://cdn.jsdelivr.net/gh/djson9/magic-edit@v0.5.2/dist/magic-edit.js">
 </script>
 
 <magic-edit
@@ -58,7 +58,7 @@ Comments remain ordinary thread messages. Selected-element context is appended t
 After the npm release is available:
 
 ```sh
-npm install @djson9/magic-edit@0.4.8
+npm install @djson9/magic-edit@0.5.2
 ```
 
 Then import the self-registering component once:
@@ -72,7 +72,7 @@ import '@djson9/magic-edit'
 Install the same package in a React Native app and run CocoaPods normally:
 
 ```sh
-npm install @djson9/magic-edit@0.4.8
+npm install @djson9/magic-edit@0.5.2
 cd ios && pod install
 ```
 
@@ -91,6 +91,13 @@ import { MagicEditBubble } from '@djson9/magic-edit/react-native'
 On iOS the package supplies the floating bubble, draggable cursor, native and
 WebView hit testing, explicit Select action, target context, and comment sheet.
 The host app supplies only placement and routing configuration.
+
+Private development builds can also add `audio` to `UIBackgroundModes`. When
+that capability is present, the bubble popup offers **Keep updates active in
+background**. The opt-in is persisted on-device and uses a silent, mixed audio
+stream so Metro can continue delivering updates while the app is backgrounded.
+The option stays hidden from builds without the capability, and force quitting
+the app always stops it.
 
 ## Development
 

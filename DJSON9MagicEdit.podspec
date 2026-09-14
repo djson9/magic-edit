@@ -13,6 +13,7 @@ Pod::Spec.new do |spec|
   spec.platform = :ios, '15.1'
   spec.swift_version = '5.0'
   spec.source_files = 'ios/**/*.{m,swift}'
+  spec.frameworks = 'AVFoundation'
   spec.dependency 'React-Core'
   spec.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES' }
 end
