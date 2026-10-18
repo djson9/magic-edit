@@ -1,4 +1,4 @@
-import { chmodSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -31,10 +31,10 @@ function validate(name, config) {
 
 describe('Magic Edit declarative app registrations', () => {
   it('validates every checked-in app registration', () => {
-    for (const target of ['acp-web', 'family-quill', 'money-app']) {
+    for (const filename of readdirSync('host/apps').filter(name => name.endsWith('.json'))) {
       const result = spawnSync(
         'bash',
-        ['bin/magic-edit-reconcile-apps', 'validate', `host/apps/${target}.json`],
+        ['bin/magic-edit-reconcile-apps', 'validate', `host/apps/${filename}`],
         { cwd: process.cwd(), encoding: 'utf8' },
       )
       expect(result.stderr).toBe('')
