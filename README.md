@@ -110,6 +110,16 @@ Version tags run tests, build the browser artifact, create a GitHub Release, and
 
 ## One-step live deployment
 
+As of October 18, 2026, ACP Web Live is the only maintained personal Live OTA
+app. Money Live, Chore Zen / Divvy Live, Family Quill Live, and the POC Hub
+development OTA are retired in favor of simulator previews through Baguette.
+Their release artifacts and signing material are retained. Stable release
+channels and the shared Magic Edit feedback/capture tools remain available.
+`host/apps` contains only the active ACP Web registration. Removing a descriptor
+also requires archiving its installed host registration, disabling its publishing
+workflows and Metro services, and replacing its Live installer route with a
+retirement notice; the reconciler does not tear down removed registrations.
+
 Magic Edit also owns the common push-to-live dispatcher. A registered app needs
 one workflow step:
 
